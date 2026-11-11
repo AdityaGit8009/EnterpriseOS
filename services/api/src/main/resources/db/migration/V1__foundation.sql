@@ -1,0 +1,62 @@
+CREATE TABLE tenants (
+ id CHAR(36) PRIMARY KEY, name VARCHAR(180) NOT NULL, slug VARCHAR(80) NOT NULL UNIQUE,
+ status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE', timezone VARCHAR(80) NOT NULL DEFAULT 'UTC',
+ created_at DATETIME(6) NOT NULL, CHECK (status IN ('ACTIVE','SUSPENDED'))
+) ENGINE=InnoDB;
+CREATE TABLE users (
+ id CHAR(36) PRIMARY KEY, name VARCHAR(180) NOT NULL, email VARCHAR(254) NOT NULL UNIQUE,
+ password_hash VARCHAR(100) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+ platform_role VARCHAR(24) NULL, created_at DATETIME(6) NOT NULL,
+ CHECK (status IN ('ACTIVE','INACTIVE')),
+ CHECK (platform_role IS NULL OR platform_role = 'PLATFORM_ADMIN')
+) ENGINE=InnoDB;
+CREATE TABLE memberships (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
+ role VARCHAR(24) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+ UNIQUE KEY uq_membership(tenant_id,user_id),
+ KEY idx_membership_user(user_id,status),
+ FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (user_id) REFERENCES users(id),
+ CHECK (role IN ('ADMIN','HR','MANAGER','MEMBER','AUDITOR')),
+ CHECK (status IN ('ACTIVE','INACTIVE'))
+) ENGINE=InnoDB;
+CREATE TABLE organization_profiles (
+ tenant_id CHAR(36) PRIMARY KEY, legal_name VARCHAR(180) NOT NULL DEFAULT '',
+ email VARCHAR(254) NOT NULL DEFAULT '', phone VARCHAR(40) NOT NULL DEFAULT '',
+ address VARCHAR(1000) NOT NULL DEFAULT '', logo_key VARCHAR(500) NOT NULL DEFAULT '',
+ FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+) ENGINE=InnoDB;
+CREATE TABLE sessions (
+ id CHAR(36) PRIMARY KEY, token_hash CHAR(64) NOT NULL UNIQUE, user_id CHAR(36) NOT NULL,
+ tenant_id CHAR(36) NULL, created_at DATETIME(6) NOT NULL, expires_at DATETIME(6) NOT NULL,
+ revoked_at DATETIME(6) NULL,
+ KEY idx_sessions_user(user_id,revoked_at), KEY idx_sessions_expiry(expires_at),
+ FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+) ENGINE=InnoDB;
+CREATE TABLE invitations (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, email VARCHAR(254) NOT NULL,
+ role VARCHAR(24) NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE,
+ expires_at DATETIME(6) NOT NULL, accepted_at DATETIME(6) NULL,
+ invited_by CHAR(36) NOT NULL, created_at DATETIME(6) NOT NULL,
+ UNIQUE KEY uq_invitation_email(tenant_id,email),
+ FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (invited_by) REFERENCES users(id),
+ CHECK (role IN ('ADMIN','HR','MANAGER','MEMBER','AUDITOR'))
+) ENGINE=InnoDB;
+CREATE TABLE password_reset_tokens (
+ id CHAR(36) PRIMARY KEY, user_id CHAR(36) NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE,
+ expires_at DATETIME(6) NOT NULL, used_at DATETIME(6) NULL, created_at DATETIME(6) NOT NULL,
+ KEY idx_reset_user(user_id), FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+CREATE TABLE audit_events (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NULL, actor_id CHAR(36) NOT NULL,
+ actor_name VARCHAR(180) NOT NULL, action VARCHAR(100) NOT NULL,
+ entity VARCHAR(80) NOT NULL, entity_id VARCHAR(100) NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ KEY idx_audit_tenant(tenant_id,created_at),
+ FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (actor_id) REFERENCES users(id)
+) ENGINE=InnoDB;
+CREATE TABLE mail_queue (
+ id CHAR(36) PRIMARY KEY, recipient VARCHAR(254) NOT NULL, subject VARCHAR(200) NOT NULL,
+ body TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'PENDING', attempts INT NOT NULL DEFAULT 0,
+ next_attempt_at DATETIME(6) NOT NULL, created_at DATETIME(6) NOT NULL, sent_at DATETIME(6) NULL,
+ KEY idx_mail_pending(status,next_attempt_at)
+) ENGINE=InnoDB;

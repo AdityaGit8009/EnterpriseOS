@@ -1,0 +1,41 @@
+﻿SolDrashta / EnterpriseOS implementation and verification
+11 November 2026
+
+Delivery
+- Real React frontend, Spring Boot 3.5.16 API, MySQL 8.4 and Flyway V1-V11.
+- All five phase module groups have persistent, authenticated workflows.
+- No demo business data, default password or browser-only role impersonation.
+- Company: SolDrashta. Owner contact: adityapratap7391@gmail.com. India defaults.
+- First-run screen establishes private company and separate platform accounts.
+- Run Start-EnterpriseOS.cmd, then open http://localhost:5173.
+- Right-middle appearance control: ten palettes plus light/dark preferences.
+- Original documents, images and reference HTML are retained.
+
+Scope
+The 316-capability catalog is tracked individually in docs/FEATURE_IMPLEMENTATION_MATRIX.csv.
+Module delivery is not a claim that all advanced catalog capabilities are complete.
+Current coverage is 226 implemented, 87 partial and 3 configuration-required.
+Frontend closeout evidence: docs/frontend-closeout-coverage.json.
+
+Verification
+- Strict frontend TypeScript and production build: PASS.
+- Frontend tests: 47 passed, zero failed/skipped.
+- Complete backend verification: 85 passed; final focused security/batch package run: 13 passed.
+- Combined current backend suites: 86 distinct tests passed, zero failures/errors/skips.
+- Literal API coverage: 227 controller mappings represented in 192 OpenAPI paths.
+- Encrypted V11 backup/isolated restore: 68 tables verified in 20.6 seconds; empty first-run assets.
+- Live readiness: 18 checks passed. Authenticated isolated HTTP workflows: 18 checks passed.
+- Load/stress: 1,200 reads at concurrency 1/8/24/64, zero failures; synthetic local environment.
+- Local app restarted after recovery drill; company setup remains ready for private account creation.
+- Machine-readable evidence: docs/VERIFICATION.json.
+- Browser visual/interactive E2E: unavailable in this environment, not claimed.
+- Docker and live remote object storage: not verified; native Windows/MySQL used.
+
+Configuration and limitations
+SMTP is not configured: email remains in the private local outbox, not Gmail.
+India payroll/tax values need actual company policies and approved examples; no filing or bank transfers.
+Document release requires configured scanning or independent manual review.
+Remote S3 bytes are excluded from local backups and require separate provider recovery verification.
+Production hosting/TLS, external integrations, central monitoring and scheduled off-host backups need configuration.
+Use README.md and docs/OPERATIONS.md for startup, accounts and recovery.
+

@@ -1,0 +1,1989 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EnterpriseOS workforce extension fragment",
+    "version": "0.3.0"
+  },
+  "paths": {
+    "/api/v1/org/workforce/policies/{kind}": {
+      "get": {
+        "operationId": "workforceExtension_policies",
+        "summary": "Policies",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "All active tenant users can read applicable policy. One encashment and one compOff policy per tenant.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkforceExtensionPolicy"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "encashment",
+                "compOff"
+              ]
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "workforceExtension_createPolicy",
+        "summary": "Create policy",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "ADMIN/HR only. Existing policy must be updated rather than duplicated; all leave types resolve to existing tenant leave policies.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "encashment",
+                "compOff"
+              ]
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionPolicy"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/policies/{kind}/{id}": {
+      "put": {
+        "operationId": "workforceExtension_updatePolicy",
+        "summary": "Update policy",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "ADMIN/HR only. Optimistic version enforced; existing request snapshots remain unchanged.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "encashment",
+                "compOff"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/requests/{kind}": {
+      "get": {
+        "operationId": "workforceExtension_requests",
+        "summary": "Requests",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Own requests, or ADMIN/HR/AUDITOR authorized organization history. Other employee requests never appear for ordinary members.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkforceExtensionRequest"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "exits",
+                "encashments",
+                "compOff"
+              ]
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "workforceExtension_submit",
+        "summary": "Submit",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Requires own linked employee account and active membership; user cannot choose another employee or inject policy. Existing pending/approved exit prevents duplicates. Encashment is only eligibility, without cash transfer or leave debit.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "exits",
+                "encashments",
+                "compOff"
+              ]
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionRequestInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/requests/{id}/decision": {
+      "post": {
+        "operationId": "workforceExtension_decide",
+        "summary": "Decide",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Independent ADMIN/HR reviewer; self-review denied. Encashment approval becomes ELIGIBLE without payment/leave mutation. Comp-off rechecks completed attendance and atomically posts one leave_adjustments credit plus a unique request posting. Due approved exit invokes existing offboarding/version/audit/last-admin/session-revocation safeguards; future exits retain access until due.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionDecision"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/requests/{id}/complete": {
+      "post": {
+        "operationId": "workforceExtension_completeExit",
+        "summary": "Complete exit",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only an approved due exit; current HR authorization and a different subject/reviewer are mandatory; last active admin cannot be removed.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workforce/projects/{projectId}/risks": {
+      "get": {
+        "operationId": "workforceExtension_risks",
+        "summary": "Risks",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only risks in currently visible project; no cross-project or cross-tenant identifiers are exposed.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkforceExtensionRisk"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "workforceExtension_createRisk",
+        "summary": "Create risk",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only ADMIN/MANAGER or project owner on active, visible project; risk owner must be active project member. Risk score is server probability times impact.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionRisk"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/risks/{id}": {
+      "put": {
+        "operationId": "workforceExtension_updateRisk",
+        "summary": "Update risk",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Same project scope/write rules, optimistic version and score validation. Members can read only risks in visible projects, not mutate them.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/recurring-tasks": {
+      "get": {
+        "operationId": "workforceExtension_recurringTasks",
+        "summary": "Recurring tasks",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only templates belonging to currently visible projects are returned; lastError and actual nextDate are included.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkforceExtensionRecurring"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "workforceExtension_createRecurring",
+        "summary": "Create recurring",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only ADMIN/MANAGER or project owner; archived projects and inactive/non-project assignees denied.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionRecurring"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/recurring-tasks/{id}": {
+      "put": {
+        "operationId": "workforceExtension_updateRecurring",
+        "summary": "Update recurring",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Version required; existing template project cannot change; server schedule/version changes after generation must be reloaded.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkforceExtensionUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workforce/recurring-tasks/{id}/occurrences": {
+      "get": {
+        "operationId": "workforceExtension_occurrences",
+        "summary": "Occurrences",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only users who can currently read the template project can access occurrence task identifiers.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkforceExtensionOccurrence"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workforce/recurring-tasks/run-due": {
+      "post": {
+        "operationId": "workforceExtension_runDue",
+        "summary": "Run due",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Only ADMIN/MANAGER or owner of a visible project. Each template runs in a separate tenant-locked transaction, bounded at100 generated tasks per run. Unique occurrence constraint and core task creation prevent replay/races/cross-tenant/inactive assignment. Errors are reported per template with lastError. Scheduled job also runs hourly (APP_WORKFORCE_JOBS_INITIAL_MS/POLL_MS); app.workforce-jobs-enabled=false disables automatic worker.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionObject"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS; use same-origin API proxy."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workforce/analytics/tasks": {
+      "get": {
+        "operationId": "workforceExtension_taskAnalytics",
+        "summary": "Task analytics",
+        "tags": [
+          "Workforce extensions"
+        ],
+        "description": "Current tenant membership, module entitlement and project/object permissions apply.",
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionAnalytics"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input, bounds, dates or field types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/object/Origin/independent-review denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant-scoped resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version, policy, lifecycle, evidence, balance or state conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkforceExtensionError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "WorkforceExtensionError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "code"
+        ]
+      },
+      "WorkforceExtensionObject": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "WorkforceExtensionPolicy": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "leaveType": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Existing leave policy type/name; normalized to canonical ledger type."
+          },
+          "eligibleAfterMonths": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 600,
+            "default": 0
+          },
+          "minRemainingDays": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "maxDays": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 366,
+            "default": 30
+          },
+          "hoursPerDay": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 8
+          },
+          "minimumHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 1
+          },
+          "maximumHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 24
+          },
+          "validForDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366,
+            "default": 90
+          },
+          "requireAttendance": {
+            "type": "boolean",
+            "default": true
+          },
+          "nonWorkingOnly": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "name",
+          "leaveType"
+        ],
+        "additionalProperties": true,
+        "description": "One versioned policy per tenant/kind, ADMIN/HR writes. Encashment uses tenure/minimum remaining/maxDays and never pays or debits entitlement. Comp-off uses actual recorded completed attendance by default, policy work-date window and hours-to-days conversion, with independent HR approval. nonWorkingOnly=true means weekend-only; set false only for an approved alternate rule."
+      },
+      "WorkforceExtensionUpdate": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "additionalProperties": true,
+        "description": "Partial update; current version is required. All supplied references and merged data are validated."
+      },
+      "WorkforceExtensionRequestInput": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "exitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "workDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "hours": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "additionalProperties": false,
+        "description": "Own requests only; employeeId/userId/policy snapshot are server-derived. exits requires exitDate. encashments requires positive days within current eligibility. compOff requires past/current workDate and hours within configured limits and completed attendance evidence."
+      },
+      "WorkforceExtensionRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "exits",
+              "encashments",
+              "compOff"
+            ]
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "ELIGIBLE",
+              "COMPLETED"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "exitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "days": {
+            "type": "number"
+          },
+          "hours": {
+            "type": "number"
+          },
+          "workDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "policySnapshot": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "reviewedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "eligibilityOnly": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "userId",
+          "employeeId",
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "WorkforceExtensionDecision": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "WorkforceExtensionRisk": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1
+          },
+          "impact": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 1
+          },
+          "mitigation": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "MITIGATING",
+              "CLOSED"
+            ],
+            "default": "OPEN"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": true
+      },
+      "WorkforceExtensionRecurring": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "assigneeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "default": "MEDIUM"
+          },
+          "intervalDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 366,
+            "default": 7
+          },
+          "nextDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dueAfterDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 366,
+            "default": 0
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "name",
+          "projectId",
+          "nextDate"
+        ],
+        "additionalProperties": true,
+        "description": "ADMIN/MANAGER or project owner configures template. Assignee must be active project member. A template cannot move between projects. Each tenant/template/date occurrence has a unique database constraint. Tasks use occurrenceDate as startDate and dueAfterDays as actual due date offset."
+      },
+      "WorkforceExtensionOccurrence": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurrenceDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "WorkforceExtensionAnalytics": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "overdue": {
+            "type": "integer"
+          },
+          "byStatus": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "aging": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "weeklyThroughput": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true,
+        "description": "Authorized real task records only; age from server created_at, overdue from actual dueDate/current state. Weekly throughput groups currently DONE tasks by latest completion history week in tenant timezone; no synthetic durations."
+      }
+    }
+  }
+}

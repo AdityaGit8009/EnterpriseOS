@@ -1,0 +1,266 @@
+{
+  "coverage": "Frontend closeout of 23 identified gaps; not a claim about every proposed catalog capability.",
+  "visualQA": "Not performed in this environment.",
+  "features": [
+    {
+      "featureId": "F-101-01",
+      "feature": "Public company registration",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/AuthGate.tsx",
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Public registration",
+      "api": "POST /auth/register-company",
+      "scope": "Creates pending email verification, not a local account."
+    },
+    {
+      "featureId": "F-101-02",
+      "feature": "Email-domain verification",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/IdentitySettings.tsx"
+      ],
+      "view": "Organization > Owned domains",
+      "api": "GET/POST /org/domains; POST /org/domains/{id}/verify",
+      "scope": "Shows actual TXT challenge; server performs DNS proof."
+    },
+    {
+      "featureId": "F-102-03",
+      "feature": "Email verification",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/auth-links.ts",
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Email verification link",
+      "api": "POST /auth/verify-company",
+      "scope": "Consumes verify-company token without browser persistence."
+    },
+    {
+      "featureId": "F-102-10",
+      "feature": "Refresh-token rotation",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Authenticated session lifecycle",
+      "api": "POST /auth/refresh",
+      "scope": "One authenticated 30-minute rotation loop with an in-flight guard."
+    },
+    {
+      "featureId": "F-103-06",
+      "feature": "Custom role creation",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/IdentitySettings.tsx"
+      ],
+      "view": "Users > Custom roles",
+      "api": "GET/POST/PUT /org/custom-roles",
+      "scope": "Predefined role cap plus narrower action allowlist."
+    },
+    {
+      "featureId": "F-103-07",
+      "feature": "Permission catalog by module/action",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/IdentitySettings.tsx",
+        "apps/web/src/data.ts"
+      ],
+      "view": "Users > Custom roles",
+      "api": "GET /org/permission-catalog; GET /org/my-permissions",
+      "scope": "Actual method/path catalog; restricted bootstrap skips denied routes."
+    },
+    {
+      "featureId": "F-104-10",
+      "feature": "Organization chart basic view",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/PlanningViews.tsx"
+      ],
+      "view": "People > Organization chart",
+      "api": "GET /org/records/employees; GET /org/records/departments",
+      "scope": "Real manager hierarchy with expansion controls and cycle-safe display."
+    },
+    {
+      "featureId": "F-205-11",
+      "feature": "Exit/resignation request",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Employee requests > Exit requests",
+      "api": "/org/workforce/requests/exits; /requests/{id}/decision; /requests/{id}/complete",
+      "scope": "Independent review and effective-dated completion."
+    },
+    {
+      "featureId": "F-207-10",
+      "feature": "Leave encashment eligibility policy",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Employee requests > Encashment policies and requests",
+      "api": "/org/workforce/policies/encashment; /requests/encashments",
+      "scope": "Eligibility only; ELIGIBLE does not represent a payment."
+    },
+    {
+      "featureId": "F-207-11",
+      "feature": "Compensatory-off balance",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Employee requests > Compensatory time",
+      "api": "/org/workforce/policies/compOff; /requests/compOff",
+      "scope": "Recorded attendance and nonworking-day policy controls; atomic credit on review."
+    },
+    {
+      "featureId": "F-208-10",
+      "feature": "Task comments and mentions",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Task discussion",
+      "api": "POST /org/tasks/{id}/comments",
+      "scope": "Project colleague selections use mentionUserIds; email mentions also supported by server."
+    },
+    {
+      "featureId": "F-208-14",
+      "feature": "Recurring tasks",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Projects > Recurring tasks",
+      "api": "/org/workforce/recurring-tasks; /run-due; /{id}/occurrences",
+      "scope": "Real enabled schedules and generated occurrence records."
+    },
+    {
+      "featureId": "F-208-15",
+      "feature": "Project timeline/Gantt view",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/PlanningViews.tsx"
+      ],
+      "view": "Projects > Timeline / Gantt",
+      "api": "GET /org/records/tasks; /projects; /sprints; /milestones",
+      "scope": "Uses recorded dates only. Due-only work is a milestone, inherited schedules are labeled."
+    },
+    {
+      "featureId": "F-208-18",
+      "feature": "Project risk register",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Projects > Risks",
+      "api": "/org/workforce/projects/{id}/risks; PUT /risks/{id}",
+      "scope": "Real scoped risk owners, probability, impact, mitigation and versioning."
+    },
+    {
+      "featureId": "F-414-09",
+      "feature": "Approve/reject/request changes",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx"
+      ],
+      "view": "Approvals > Approval cases",
+      "api": "/workflows/instances/{id}/request-changes; /resubmit",
+      "scope": "Resubmission uses captured form fields and a new approval cycle."
+    },
+    {
+      "featureId": "F-414-13",
+      "feature": "Workflow dry-run validation",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx",
+        "apps/web/src/workflow-forms.ts"
+      ],
+      "view": "Approvals > Workflow definitions > Dry-run",
+      "api": "POST /org/workflows/definitions/{id}/dry-run",
+      "scope": "Shows returned routing applicability, approvers and validation errors without creating a case."
+    },
+    {
+      "featureId": "F-414-14",
+      "feature": "Custom form field mapping",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx",
+        "apps/web/src/workflow-forms.ts"
+      ],
+      "view": "Approvals > Workflow definitions > Form fields",
+      "api": "GET/PUT /org/workflows/definitions/{id}/form",
+      "scope": "Structured field editor and dynamic runtime inputs. New cases use publishedFields; resubmission uses captured schema."
+    },
+    {
+      "featureId": "F-415-06",
+      "feature": "Mention notifications",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx",
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Notifications > Mentions; Task discussion",
+      "api": "GET/POST /org/notifications/mentions; POST /org/tasks/{id}/comments",
+      "scope": "Scoped recipient selections and actual mention history."
+    },
+    {
+      "featureId": "F-415-11",
+      "feature": "Digest notifications",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx"
+      ],
+      "view": "Notifications > Digest and Digest history",
+      "api": "GET/PUT /org/notifications/digest; POST /digest/send; GET /digest/history",
+      "scope": "Own digest preference and real queue/delivery status."
+    },
+    {
+      "featureId": "F-416-10",
+      "feature": "Document preview",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/EnterpriseModules.tsx"
+      ],
+      "view": "Documents > Preview",
+      "api": "GET /org/documents/{id}/preview",
+      "scope": "Authenticated clean-file preview in native browser viewer; server controls MIME and ACL."
+    },
+    {
+      "featureId": "F-417-01",
+      "feature": "Dashboard widget configuration",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/DashboardWidgets.tsx"
+      ],
+      "view": "Overview > Your dashboard widgets",
+      "api": "GET/PUT /org/dashboard/widgets; GET /widgets/data",
+      "scope": "Saved metric/chart/list layout renders only returned authorized data."
+    },
+    {
+      "featureId": "F-417-07",
+      "feature": "Task aging and throughput",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/WorkforceExtensions.tsx"
+      ],
+      "view": "Projects > Task analytics",
+      "api": "GET /org/workforce/analytics/tasks",
+      "scope": "Server-derived aging/status/weekly-throughput maps rendered as real charts and record tables."
+    },
+    {
+      "featureId": "F-521-15",
+      "feature": "Feature flags",
+      "frontendStatus": "implemented",
+      "sourceFiles": [
+        "apps/web/src/FeatureFlags.tsx",
+        "apps/web/src/App.tsx"
+      ],
+      "view": "Organization > Module flags",
+      "api": "GET/POST/PUT /org/feature-flags/{key}",
+      "scope": "Server-backed module flags; disabled module navigation is gated."
+    }
+  ]
+}

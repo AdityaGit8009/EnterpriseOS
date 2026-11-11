@@ -1,0 +1,71 @@
+EnterpriseOS local implementation contract
+
+Build only Phase 1 + Phase 2. All 5 phases exist. Preserve source requirements.
+Workspace split: root agent owns apps/web/src/styles.css, integration, root scripts,
+Docker Compose, README, browser QA. Frontend agent owns other apps/web files.
+Core backend agent owns services/api except OperationsController.java and V2 SQL.
+Workforce backend agent owns OperationsController.java, V2 SQL and its tests only.
+
+Frontend is React + TypeScript + Vite. Main app has visible demo mode with sample
+data and browser persistence; live mode authenticates against backend. Never imply
+demo role switching/localStorage is security. Use clear demo label + Connect API.
+Reference theme: existing erp-home (1).html. Root builds styles: CSS variables
+--p --p2 --ac --side --soft --bg --card --text --muted --line. data-theme colors:
+ocean emerald royal sunset rose teal slate gold berry indigo. data-mode light/dark.
+Root CSS class conventions should be coordinated with frontend agent.
+
+Backend package com.enterpriseos; Java 25; Spring Boot 3.5.0, JDBC, Spring Security
+crypto BCrypt, Flyway, MySQL. Session opaque random token HttpOnly SameSite=Lax cookie
+EOS_SESSION; a filter resolves request attribute principal as Principal record
+(userId,tenantId,name,email,role), injected via @RequestAttribute.
+Public /api/v1/auth/login POST {email,password}, /auth/logout POST,
+/auth/forgot-password POST {email}, /auth/reset-password POST {token,password},
+/invitations/accept POST {token,name,password}. GET /api/v1/me returns principal.
+Mutations use same-origin Origin verification filter, safe read no secrets.
+Errors JSON {message,code}. Frontend dev proxy /api -> localhost:8080.
+
+Core API:
+GET/POST /api/v1/platform/tenants, PATCH /platform/tenants/{id}/status {status}.
+GET/PUT /api/v1/org/profile.
+GET /api/v1/org/users, PATCH /org/users/{id}/status {status}, PATCH
+/org/users/{id}/role {role}. Roles ADMIN, HR, MANAGER, MEMBER, AUDITOR;
+PLATFORM_ADMIN is isolated platform scope (no org data by default).
+GET/POST /org/invitations {email,role}; GET /org/audit-events.
+GET /org/dashboard. GET /org/roles lists role permission descriptions.
+
+Operations API (OperationsController):
+GET/POST /api/v1/org/records/{kind}; PUT /org/records/{kind}/{id} with {version,...}
+Kinds: departments, branches, teams, designations, employees, shifts,
+shiftAssignments, leavePolicies, projects, sprints, milestones, tasks, timeEntries.
+Record object {id,version,...payload}; fields frontend coordinated directly.
+POST /org/attendance/check-in {}; POST /org/attendance/check-out {};
+GET /org/attendance; POST /org/attendance/corrections {attendanceId,reason,inAt,outAt};
+GET /org/attendance/corrections;
+POST /org/attendance/corrections/{id}/decision {decision:APPROVED|REJECTED}.
+GET/POST /org/leave/requests {type,startDate,endDate,reason};
+POST /org/leave/requests/{id}/decision {decision:APPROVED|REJECTED};
+POST /org/leave/requests/{id}/cancel {}; GET /org/leave/balances.
+GET /org/leave/ledger. GET/POST /org/tasks/{id}/comments {body}.
+
+Core agent supplies public record Principal(String userId,String tenantId,String
+name,String email,String role) in own Principal.java; public ApiException extends
+RuntimeException with (int status,String message), status(); public AuditService
+with void log(Principal actor,String action,String entity,String entityId).
+Core agent provides JdbcTemplate/ObjectMapper beans automatically via Boot;
+OperationsController uses these directly. All identifiers UUID strings length 36.
+Core audit_events columns id,tenant_id,actor_id,actor_name,action,entity,entity_id,
+created_at; core tenants columns id,name,slug,status,timezone,created_at;
+memberships columns id,tenant_id,user_id,role,status;
+users columns id,name,email,password_hash,status,created_at.
+Operations owns business_records and leave/attendance tables via V2 migration.
+No cross-tenant authority from request payload. Every query scoped by principal.
+Mutations must guard role/object ownership, use @Transactional; reject stale
+versions, inactive assignees, cross-tenant references, cycles, archived writes,
+self approval, duplicate attendance and duplicate leave deduction.
+
+Email uses configurable SMTP when configured, local development outbox otherwise.
+Do not expose invite/reset tokens through public API responses. Core documents
+how local development mail is inspected. Bootstrap demo seed only when explicit
+APP_SEED_DEMO=true; credentials from env, defaults only local development.
+Tests: useful auth/tenant denial and concurrency/state invariants where runnable.
+Frontend should work as standalone static bundle directly from erp-home (1).html.

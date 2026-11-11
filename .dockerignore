@@ -1,0 +1,10 @@
+tmp
+**/node_modules
+**/target
+.git
+.env
+*.pdf
+*.docx
+*.jpg
+erp-home (1).html
+references

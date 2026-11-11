@@ -1,0 +1,209 @@
+{
+  "collectedAt": "2026-11-11T07:53:18.895291+00:00",
+  "backend": {
+    "totals": {
+      "tests": 86,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "suite": "AuthConcurrencyIntegrationTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "AuthFilterTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "AuthIntegrationTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "AutomationExtensionIntegrationTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "AutomationIntegrationTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "BusinessIntegrationTest",
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "DocumentBlobStoreTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "MfaServiceTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "SetupControllerTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "SetupIntegrationTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "WorkforceExtensionIntegrationTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "suite": "WorkforceIntegrationTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "httpReadiness": {
+    "base": "http://localhost:5173",
+    "checkedAt": "2026-11-11T07:53:18.480Z",
+    "passed": 18,
+    "checks": [
+      "frontend HTML",
+      "exact production app.js",
+      "exact production app.css",
+      "first-run setup status",
+      "anonymous blocked /me",
+      "anonymous blocked /org/profile",
+      "anonymous blocked /org/records/employees",
+      "anonymous blocked /org/business/records/leads",
+      "anonymous blocked /org/business/inventory/stock",
+      "anonymous blocked /org/business/records/invoices",
+      "anonymous blocked /org/business/payroll/payslips",
+      "anonymous blocked /org/workflows/definitions",
+      "anonymous blocked /org/documents",
+      "anonymous blocked /org/reports",
+      "anonymous blocked /platform/plans",
+      "anonymous blocked /platform/runtime-metrics",
+      "untrusted origin blocked",
+      "invalid login validation"
+    ]
+  },
+  "httpWorkflows": {
+    "checkedAt": "2026-11-11T07:50:25.805Z",
+    "checks": 18,
+    "scope": "Fresh isolated MySQL schema; synthetic account and records; actual HTTP proxy/API authentication, persistence, comment history and session revocation"
+  },
+  "localLoad": {
+    "testedAt": "2026-11-11T07:51:03.330Z",
+    "base": "http://localhost:5174",
+    "endpoints": [
+      "/org/records/projects",
+      "/org/records/tasks",
+      "/org/attendance",
+      "/org/business/records/leads",
+      "/org/reports"
+    ],
+    "results": [
+      {
+        "concurrency": 1,
+        "requests": 300,
+        "failures": 0,
+        "elapsedMillis": 10854,
+        "requestsPerSecond": 27.64,
+        "p50Millis": 23.22,
+        "p95Millis": 96.14,
+        "p99Millis": 155.98
+      },
+      {
+        "concurrency": 8,
+        "requests": 300,
+        "failures": 0,
+        "elapsedMillis": 6418,
+        "requestsPerSecond": 46.74,
+        "p50Millis": 144.78,
+        "p95Millis": 356.81,
+        "p99Millis": 577.09
+      },
+      {
+        "concurrency": 24,
+        "requests": 300,
+        "failures": 0,
+        "elapsedMillis": 5349,
+        "requestsPerSecond": 56.09,
+        "p50Millis": 337.13,
+        "p95Millis": 1178.42,
+        "p99Millis": 1415.85
+      },
+      {
+        "concurrency": 64,
+        "requests": 300,
+        "failures": 0,
+        "elapsedMillis": 3370,
+        "requestsPerSecond": 89.02,
+        "p50Millis": 549.73,
+        "p95Millis": 1205.29,
+        "p99Millis": 1391.29
+      }
+    ],
+    "scope": "Local synthetic authenticated read workload at four concurrency levels, including 64 concurrent requests above the 10-connection database pool. No production availability or capacity target is inferred."
+  },
+  "localRestore": {
+    "verifiedAt": "2026-11-11T07:52:05.8755600Z",
+    "backupCreatedAt": "2026-11-11T07:51:44.1322830Z",
+    "restoredSchema": "eos_restore_1794383505259",
+    "durationMillis": 20606,
+    "tablesVerified": 68,
+    "filesVerified": 0,
+    "remoteDocumentVersions": 0,
+    "scope": "Isolated database import and local asset hash verification; remote object bytes are excluded; no live records or files replaced"
+  },
+  "frontend": {
+    "tests": 47,
+    "failures": 0,
+    "typecheck": "passed",
+    "build": "passed",
+    "evidence": "tmp/frontend-closeout-{typecheck,tests,build}.log"
+  },
+  "catalogCoverage": {
+    "implemented": 226,
+    "partial": 87,
+    "configuration required": 3
+  },
+  "limitations": [
+    "Browser visual/interactive E2E was unavailable.",
+    "Docker, live SMTP, remote object storage and production hosting were not verified.",
+    "Local synthetic read-load results do not establish production capacity or an SLA.",
+    "Catalog partial/configuration statuses remain explicit; all proposed capabilities are not claimed complete."
+  ]
+}

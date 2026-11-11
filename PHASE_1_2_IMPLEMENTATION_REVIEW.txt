@@ -1,0 +1,276 @@
+EnterpriseOS Phase 1 and Phase 2 Implementation Review
+Reviewed 11 November 2026
+
+Review outcome
+
+Focus the initial build on secure company onboarding and administration (Phase 1),
+then workforce and project operations (Phase 2). The supplied pack describes a
+substantial application, not just dashboard mockups. It is suitable for preparing
+the implementation design, but policy details, action permissions and several
+conflicting scope choices still need a recorded baseline.
+
+Three parallel reviews covered scope, backend/data/security and frontend/UI.
+All findings below are review recommendations unless explicitly identified as a
+requirement from a source. No client approval is implied. Original files remain
+unchanged. No application implementation was performed during this review.
+
+1. Sources and coverage
+
+Read all seven DOCX documents and checked extracted content from their seven
+PDF counterparts: Complete Project Documentation, Master Feature Catalog, and
+Phase 1 through Phase 5 Client Requirements BRD/SRS. Also reviewed all 316 rows
+of EnterpriseOS_Feature_Backlog.csv, Phase_Document_Index.csv,
+README_START_HERE.txt and all 12 JPG reference images.
+
+PDF page counts: Complete 21; Catalog 11; Phase 1 8; Phases 2, 3, 4 and 5 each 7.
+PDF extraction contains running headers, table-cell ordering and some symbol
+encoding artifacts. DOCX text was used to resolve those extraction ambiguities.
+This was a requirements/content and reference-image review, not a page-by-page
+visual certification of PDF/Word layout.
+
+At review time the root contained requirements and references, with no supplied
+frontend/backend application or existing automated application test suite.
+
+2. Recommended document interpretation
+
+README, phase index and the five phase BRD/SRS documents share a five-phase plan:
+1 Foundation, company onboarding, identity and RBAC.
+2 HR, attendance/shifts, leave and project operations.
+3 CRM, inventory/procurement, expenses/invoices and payroll.
+4 Generic workflows, collaboration, documents, advanced reports and integrations.
+5 Commercial subscriptions, broader hardening, operations and handover.
+
+Complete Project Documentation section 15 instead uses stages 0 through 8. Do
+not equate its phase 2 with the new Phase 2. Its architecture remains a reference;
+its older phase numbering and illustrative estimates should not drive this plan.
+
+Recommended working precedence: explicit user scope, then reconciled Phase 1/2
+BRDs; catalog/backlog as candidate inventory; complete blueprint as architecture
+reference. The documents do not explicitly establish precedence, so this is a
+planning recommendation, not an approved document-control rule.
+
+3. Inventory versus implementation commitments
+
+Catalog and backlog contain the same 316 proposed feature IDs across 21 domains.
+Phase 1: 56 candidates, comprising 20 Must, 24 Should and 12 Could.
+Phase 2: 62 candidates, comprising 20 Must, 24 Should and 18 Could.
+Current focus therefore contains 118 candidates: 40 Must, 48 Should and 30 Could.
+Every backlog Status is Proposed; Client Decision, Owner and Acceptance Criteria
+are unfilled. Priority labels do not override mandatory security/business rules
+in the detailed BRDs and do not make all 118 candidates approved scope.
+
+4. Phase 1 implementation baseline
+
+Sources: Phase 1 sections 4-8 and 11-13; FR-01 through FR-12.
+
+Platform administrator:
+- Protected platform sign-in/area, tenant directory and tenant creation.
+- Unique company slug; owner provisioning and invitation.
+- Tenant detail, activation, suspension/reactivation and activity overview.
+
+Organization administrator:
+- Company profile, contact/address, timezone and validated logo handling.
+- User directory with search/filter/pagination; invitations and user status.
+- Predefined roles, permission mapping and role assignment.
+- Dashboard showing active users, pending invitations and recent activities.
+- Tenant-scoped audit history.
+
+Identity and member experience:
+- Login/logout, session/refresh lifecycle, forgot/reset password.
+- Expiring single-use invitation acceptance and password setup.
+- Personal profile/change password, permitted navigation and dashboard shell.
+- Loading/empty/error states, access denied, session expiry and responsive forms.
+
+Security is part of this phase: trusted tenant context, authorization on every
+protected operation, active membership checks, revoked/suspended access rejection,
+last-admin protection, audit, hashed tokens and server-side validation.
+Custom role builder (FR-13) and mandatory MFA/SSO (FR-14) remain optional choices.
+
+5. Phase 2 implementation baseline
+
+Sources: Phase 2 sections 4-10 and 12-13.
+
+Organization and HR, P2-FR-0101 through 0105:
+- Branches, departments, teams, designations and reporting hierarchy.
+- Employee directory/profiles, employee codes and manager assignments.
+- Effective-dated onboarding, transfers, position changes and offboarding.
+- Employee self-service and emergency contacts.
+- Field-level confidential HR access, including API/search/export behavior.
+
+Attendance and shifts, P2-FR-0201 through 0205:
+- Locations, workdays, holidays, shift templates and effective-dated rosters.
+- Manual check-in/out with source and timestamps.
+- Daily attendance, lateness, informational overtime and exception calculation.
+- Correction request and independent supervisor review, preserving originals.
+
+Leave, P2-FR-0301 through 0305:
+- Leave types/policies, accrual, entitlement, carry-forward and balance history.
+- Submit/cancel/track requests with policy-aware overlap/entitlement checks.
+- Configured manager/HR approval chains, delegation and escalation.
+- Atomic balance updates and auditable cancellation/reversal.
+
+Projects, P2-FR-0401 through 0405:
+- Projects, team membership, scoped visibility and archive/read-only behavior.
+- Milestones, backlog, sprints and Kanban board.
+- Tasks/subtasks, priority/labels, assignees, dependencies and comments.
+- Activity, overdue tasks and workload; manual time entries are optional.
+- Reject inactive assignees and cyclic dependencies.
+
+Phase 2 release depends on accepted and regression-tested Phase 1 (section 2).
+Payroll, CRM, invoices, inventory, biometric/GPS integration and the generic
+workflow designer are outside the current phase focus.
+
+6. Conflicts and proposed treatment
+
+R01 Registration/domain verification
+Catalog F-101-01/02 says Must. Phase 1 FR-02 specifies platform provisioning and
+section 16 leaves registration mode undecided. Proposal: begin with administrator
+provisioning/invitations; record public signup and domain verification separately.
+
+R02 MFA and role customization
+F-102-05 says TOTP Must; Phase 1 FR-14 and section 11 defer mandatory MFA/SSO.
+F-103-06 suggests custom roles; FR-13 treats a role builder as optional.
+Proposal: predefined roles and password login baseline; explicitly decide additions.
+
+R03 Organization and imports
+F-104-05 places departments in Phase 1, while P2-FR-0101 owns organization structure.
+Use one shared organization module and avoid duplicated department tables/screens.
+F-104-02 bulk user import is Must in catalog but absent from detailed Phase 1 FRs.
+Distinguish user-account import from employee/history import; specify formats first.
+
+R04 Mandatory controls with weak catalog priorities
+F-103-09 API authorization Should, F-103-12 least privilege Could, F-102-14 access
+revocation Could and F-104-14 dashboard Could conflict with Phase 1 required behavior.
+F-205-15 confidential HR access Could conflicts with P2-FR-0105/UAT-P2-02.
+Implement these BRD controls with their corresponding feature, regardless of label.
+
+R05 Phase 2 feature priority mismatch
+F-207-06 approval chains and F-208-08 dependencies are Should but included in
+P2-FR-0304/0403. Sprint/backlog is in P2-FR-0402 while discovery still asks whether
+the client needs it. Keep all listed items visible in planning; record any deferral.
+
+R06 Identity and membership
+Complete sections 2/8 assume multiple memberships and globally unique email.
+Phase 1 section 5 leaves these choices open. Keep users separate from memberships;
+do not expose tenant switching without an agreed policy. Membership deactivation
+must not accidentally disable a global identity in an unrelated organization.
+
+R07 Suspension
+Complete sections 4.1/4.14 describe write blocking/read-only behavior. Phase 1 FR-03,
+section 5 and UAT-06 deny protected access. Proposal: administrative suspension
+blocks protected access; model future subscription grace/read-only separately.
+
+R08 API naming and missing operations
+Phase BRDs use /api/v1/org/...; Complete section 9 and Catalog section 9 differ.
+Proposal: standardize /api/v1/auth, /api/v1/platform and /api/v1/org before UI wiring.
+Route inventories are illustrative: add explicit contracts for check-out, rosters,
+leave balances/cancellation, employee lifecycle, sprint/milestone and task dependency
+operations. Define DTOs, authorization, error codes, pagination and conflict rules.
+
+R09 Estimates and service objectives
+Complete sections 6/15 contain illustrative concurrency, availability, RPO/RTO and
+effort estimates. Phase BRDs leave actual workload, timeline and cost TBD.
+Do not turn reference estimates into commitments.
+
+7. Shared dependencies required during Phase 1/2
+
+- Transactional invitation/reset email and retries must work in Phase 1. A small
+  outbox/email worker can support this before the Phase 4 notification center.
+- Phase 2 uses configured approval chains (section 12). Implement narrow leave
+  and attendance decision/history components now; defer the generic designer.
+- Company logos need validated file storage now. If HR/task/leave attachments are
+  selected, provide minimal tenant/object authorization and private storage; the
+  full document center, versioning and advanced sharing remain Phase 4.
+- Migrations, CI, validation, audit, tenant tests, logs and recovery checks start
+  with Phase 1. Phase 5 is broader hardening, not the first security/testing pass.
+- Preserve effective-dated, auditable attendance/leave inputs for Phase 3 payroll.
+  Salary calculation, payslips and statutory rules remain later work.
+
+8. Data and business-rule design work
+
+Use the supplied stack: React + TypeScript, Java Spring Boot, MySQL 8.4 LTS and
+a modular monolith. Exact supported dependency versions should be verified when
+implementation starts. Microservices, RabbitMQ and Kubernetes are not required
+by Phase 1/2. Use versioned Flyway or Liquibase migrations.
+
+Initial entities: tenants, users, memberships, roles/permissions/assignments,
+invitations, sessions, password resets, organization profiles and audit events.
+Add branches/departments/teams/designations, employees and effective-dated job
+history; shifts/assignments, attendance events/daily summaries/adjustments;
+leave policies, balances, append-only ledger, requests and approval decisions;
+projects/members/milestones/sprints/tasks/dependencies/comments/time entries.
+
+The Phase 2 table inventory is incomplete relative to its requirements: teams,
+milestones, checklist records and an explicit leave ledger need design decisions.
+Employee employment status, identity status and tenant-membership status are
+different concepts. Model optional employee login accounts deliberately.
+
+All tenant-owned relationships need tenant-safe constraints and service checks.
+Use UTC instants plus timezone/shift-derived work dates; do not equate UTC date
+with a local workday. Preserve original attendance events and correction history.
+Version policies/assignments that affect historical calculations.
+
+Resolve worked examples for overnight shifts, missing punches, overtime/grace,
+weekends, half-day/hourly leave, accrual, carry-forward, pending reservations and
+approved cancellation. Serialize/idempotently process competing leave decisions.
+Detect task cycles safely under concurrent updates; enforce archived-project guards.
+
+9. UI direction from all 12 reference images
+
+Images are visual inspiration, not approved product requirements or branding.
+Sorted JPG ordering used in the temporary contact sheets:
+1 Scopeboard (-UMWx...): useful task metadata; visually dense/purple-pink.
+2 Innowise (Bgoe...): useful HR filters and attendance trend patterns.
+3 Project Workspace (CKO2...): recommended primary Kanban reference.
+4 Meridian (K0UM...): useful enterprise shell, sectioned navigation and tables.
+5 MPP (khuT...): useful status counts; simplify saturated board headers.
+6 Compreo (l7fd...): financial dashboard reference for later phases.
+7 Pi ERP (NZLu...): dark variation; chatbot/financial content outside current focus.
+8 Ceraltek (OLNT...): useful portfolio summary and status/progress patterns.
+9 Financial dashboard (Q-u...): later finance reference.
+10 Orbit (q3xed...): rich board/filter inspiration; exclude Ask AI functionality.
+11 EasyTeam (qx773...): recommended primary HR/dashboard reference.
+12 NeuroERP (Yg6...): useful shell, but business/finance metrics belong later.
+
+Recommended styling: light neutral canvas, white panels, blue primary actions,
+clear sidebar, readable tables, restrained status badges and consistent forms.
+Use EasyTeam's HR layout and Project Workspace's board structure as starting
+references. Replace payroll/revenue widgets with attendance, leave approvals and
+assigned work. These are proposed design choices pending branding direction.
+
+Every table/form/board needs loading, empty, error and denied states. Provide
+keyboard alternatives for board moves, visible focus and responsive layouts.
+Clear tenant-specific UI cache on context changes if tenant switching is enabled.
+
+10. Recommended build sequence and proof
+
+1 Repository/application skeleton, local environment, migrations, CI and contracts.
+2 Identity/session lifecycle, trusted tenant context, permissions and audit.
+3 Tenant creation/owner invitation, organization/users/roles and dashboard.
+4 Phase 1 checks: duplicate slug, token expiry/reuse, permission denial, tenant swap,
+  deactivation/suspension with old sessions, last-admin protection and restore drill.
+5 Organization master data, HR lifecycle and confidential-field enforcement.
+6 Shifts/attendance events, daily calculations, corrections and supervisor review.
+7 Leave policy examples, ledger, configured approvals and cancellation/reversal.
+8 Projects/members/milestones/sprints, Kanban/tasks, safe dependencies and activity.
+9 Integrated regression, UAT evidence and deployment/handover for the focused scope.
+
+Critical Phase 2 proof: cross-tenant and private-field denial; original attendance
+preserved; concurrent leave decisions apply one balance change; reversals reconcile;
+inactive task assignees rejected; cycles rejected; archived projects read-only;
+employees cannot see unauthorized projects. Use real MySQL integration tests for
+transactions/constraints, frontend checks for critical forms, and end-to-end tests
+for the tenant onboarding and workforce/project journeys.
+
+11. Decisions to capture before dependent feature implementation
+
+- Registration mode, membership/email uniqueness, suspension and MFA policies.
+- Action-level roles: self/team/branch/tenant visibility and approve/export powers.
+- Employee required/private fields, account links, imports and retention.
+- Attendance/leave policies and worked examples, approval delegation/escalation.
+- Sprint versus Kanban scope, task states/visibility and optional time tracking.
+- Upload selection/limits, sender provider, hosting/region, workload and branding.
+
+These decisions do not prevent preparing the repository, shared architecture,
+wireframes, ERD and draft API contracts. Keep proposed defaults visible and resolve
+policy-dependent behavior before treating it as an accepted implementation rule.

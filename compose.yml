@@ -1,0 +1,63 @@
+services:
+  database:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: enterpriseos
+      MYSQL_USER: enterpriseos
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u enterpriseos -p\"$$MYSQL_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  api:
+    build: ./services/api
+    environment:
+      DB_URL: jdbc:mysql://database:3306/enterpriseos?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      DB_USERNAME: enterpriseos
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_ALLOWED_ORIGINS: http://localhost:5173
+      APP_PUBLIC_BASE_URL: http://localhost:5173
+      APP_SECURE_COOKIES: "false"
+      APP_SETUP_ENABLED: ${APP_SETUP_ENABLED:-false}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+      APP_WEBHOOK_ALLOWED_HOSTS: ${APP_WEBHOOK_ALLOWED_HOSTS:-}
+      APP_CLAMAV_HOST: ${APP_CLAMAV_HOST:-}
+      APP_CLAMAV_PORT: ${APP_CLAMAV_PORT:-3310}
+      APP_MAIL_OUTBOX_DIR: /app/var/mail-outbox
+      APP_LOGO_DIR: /app/var/logos
+      APP_DOCUMENT_DIR: /app/var/documents
+      APP_OBJECT_STORAGE_ENDPOINT: ${APP_OBJECT_STORAGE_ENDPOINT:-}
+      APP_OBJECT_STORAGE_BUCKET: ${APP_OBJECT_STORAGE_BUCKET:-}
+      APP_OBJECT_STORAGE_REGION: ${APP_OBJECT_STORAGE_REGION:-us-east-1}
+      APP_OBJECT_STORAGE_ACCESS_KEY: ${APP_OBJECT_STORAGE_ACCESS_KEY:-}
+      APP_OBJECT_STORAGE_SECRET_KEY: ${APP_OBJECT_STORAGE_SECRET_KEY:-}
+      APP_OBJECT_STORAGE_SESSION_TOKEN: ${APP_OBJECT_STORAGE_SESSION_TOKEN:-}
+      APP_OBJECT_STORAGE_ALLOW_HTTP: ${APP_OBJECT_STORAGE_ALLOW_HTTP:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-enterpriseos@localhost}
+    volumes:
+      - api-data:/app/var
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: infra/web.Dockerfile
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+volumes:
+  mysql-data:
+  api-data:

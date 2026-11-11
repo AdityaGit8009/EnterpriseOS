@@ -1,0 +1,4546 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SolDrashta automation and platform API fragment",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/org/workflows/definitions": {
+      "get": {
+        "operationId": "automation_definitions_get_0",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "definitions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "automation_createdefinition_post_1",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "definitions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDefinitionInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/definitions/{id}": {
+      "put": {
+        "operationId": "automation_editdefinition_put_1",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/definitions/{id}/publish": {
+      "post": {
+        "operationId": "automation_publish_post_2",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "publish",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workflows/definitions/{id}/versions": {
+      "get": {
+        "operationId": "automation_versions_get_3",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "versions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workflows/instances": {
+      "get": {
+        "operationId": "automation_instances_get_4",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "instances",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "automation_start_post_5",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "instances",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowCaseInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/decisions": {
+      "post": {
+        "operationId": "automation_decide_post_5",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "decisions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/delegate": {
+      "post": {
+        "operationId": "automation_delegate_post_6",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "delegate",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/cancel": {
+      "post": {
+        "operationId": "automation_cancel_post_7",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "cancel",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/history": {
+      "get": {
+        "operationId": "automation_history_get_8",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "history",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/notifications": {
+      "get": {
+        "operationId": "automation_notifications_get_9",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "notifications",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "automation_announce_post_11",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "notifications",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/notifications/{id}/read": {
+      "patch": {
+        "operationId": "automation_read_patch_10",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "read",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/notifications/preferences": {
+      "get": {
+        "operationId": "automation_preferences_get_11",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "preferences",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "automation_preferences_put_12",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "preferences",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/notifications/deliveries": {
+      "get": {
+        "operationId": "automation_deliveries_get_12",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "deliveries",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/notifications/stream": {
+      "get": {
+        "operationId": "automation_stream_get_13",
+        "tags": [
+          "Automation"
+        ],
+        "summary": "stream",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticated current-user SSE stream; reconnect after timeout",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/documents": {
+      "get": {
+        "operationId": "document_list_get_14",
+        "tags": [
+          "Document"
+        ],
+        "summary": "documents",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "document_upload_post_15",
+        "tags": [
+          "Document"
+        ],
+        "summary": "documents",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUploadInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/documents/{id}/versions": {
+      "post": {
+        "operationId": "document_version_post_15",
+        "tags": [
+          "Document"
+        ],
+        "summary": "versions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "document_versions_get_16",
+        "tags": [
+          "Document"
+        ],
+        "summary": "versions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}/scan": {
+      "post": {
+        "operationId": "document_review_post_16",
+        "tags": [
+          "Document"
+        ],
+        "summary": "scan",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/documents/{id}/download": {
+      "get": {
+        "operationId": "document_download_get_17",
+        "tags": [
+          "Document"
+        ],
+        "summary": "download",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized attachment",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional expiring user-bound download token; session/object authorization still required."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}/links": {
+      "post": {
+        "operationId": "document_link_post_18",
+        "tags": [
+          "Document"
+        ],
+        "summary": "links",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}/retention": {
+      "put": {
+        "operationId": "document_retention_put_19",
+        "tags": [
+          "Document"
+        ],
+        "summary": "retention",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/documents/{id}/archive": {
+      "post": {
+        "operationId": "document_archive_post_20",
+        "tags": [
+          "Document"
+        ],
+        "summary": "archive",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}": {
+      "delete": {
+        "operationId": "document_delete_delete_21",
+        "tags": [
+          "Document"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}/access": {
+      "get": {
+        "operationId": "document_access_get_22",
+        "tags": [
+          "Document"
+        ],
+        "summary": "access",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/reports": {
+      "get": {
+        "operationId": "report_summary_get_23",
+        "tags": [
+          "Report"
+        ],
+        "summary": "reports",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/reports/definitions": {
+      "get": {
+        "operationId": "report_definitions_get_24",
+        "tags": [
+          "Report"
+        ],
+        "summary": "definitions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "report_definition_post_25",
+        "tags": [
+          "Report"
+        ],
+        "summary": "definitions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/reports/definitions/{id}": {
+      "put": {
+        "operationId": "report_schedule_put_25",
+        "tags": [
+          "Report"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/reports/exports": {
+      "get": {
+        "operationId": "report_exports_get_26",
+        "tags": [
+          "Report"
+        ],
+        "summary": "exports",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "report_export_post_27",
+        "tags": [
+          "Report"
+        ],
+        "summary": "exports",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportExportInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/reports/definitions/{id}/exports": {
+      "post": {
+        "operationId": "report_exportsaved_post_27",
+        "tags": [
+          "Report"
+        ],
+        "summary": "exports",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/reports/exports/{id}/download": {
+      "get": {
+        "operationId": "report_download_get_28",
+        "tags": [
+          "Report"
+        ],
+        "summary": "download",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized attachment",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/platform/plans": {
+      "get": {
+        "operationId": "platform_plans_get_29",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "plans",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "platform_plan_post_30",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "plans",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/subscriptions": {
+      "get": {
+        "operationId": "platform_subscriptions_get_30",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "subscriptions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "platform_subscribe_post_31",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "subscriptions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/subscriptions/{id}": {
+      "patch": {
+        "operationId": "platform_change_patch_31",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/subscription": {
+      "get": {
+        "operationId": "platform_ownsubscription_get_32",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "subscription",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/usage": {
+      "get": {
+        "operationId": "platform_usage_get_33",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "usage",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/subscription/history": {
+      "get": {
+        "operationId": "platform_ownhistory_get_34",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "history",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/operations": {
+      "get": {
+        "operationId": "platform_operations_get_35",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "operations",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/mail/{id}/retry": {
+      "post": {
+        "operationId": "platform_retrymail_post_36",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "retry",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/platform/audit/security-events": {
+      "get": {
+        "operationId": "platform_securityevents_get_37",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "security-events",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/records/{kind}": {
+      "get": {
+        "operationId": "platform_records_get_38",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "{kind}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "platform_createrecord_post_39",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "{kind}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/records/{kind}/{id}": {
+      "put": {
+        "operationId": "platform_updaterecord_put_39",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/release-status": {
+      "get": {
+        "operationId": "platform_releasestatus_get_40",
+        "tags": [
+          "Platform"
+        ],
+        "summary": "release-status",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/webhooks": {
+      "get": {
+        "operationId": "integration_endpoints_get_41",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "webhooks",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "integration_endpoint_post_42",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "webhooks",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/webhooks/{id}/rotate": {
+      "post": {
+        "operationId": "integration_rotate_post_42",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "rotate",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/integrations/webhooks/{id}/status": {
+      "patch": {
+        "operationId": "integration_status_patch_43",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "status",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/deliveries": {
+      "get": {
+        "operationId": "integration_deliveries_get_44",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "deliveries",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/deliveries/{id}/retry": {
+      "post": {
+        "operationId": "integration_retry_post_45",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "retry",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/webhooks/{id}": {
+      "post": {
+        "operationId": "integration_receive_post_46",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "{id}",
+        "security": [
+          {
+            "webhookHmac": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "description": "HMAC-SHA256 over timestamp + dot + exact raw UTF-8 body. Timestamp must be within five minutes. Event IDs are replay-protected. Accepts metadata fields id,type,entity,entityId,occurredAt only; no cookie authority.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-EOS-Timestamp",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-EOS-Event-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-EOS-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/inbound-events": {
+      "get": {
+        "operationId": "integration_inbound_get_47",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "inbound-events",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/credentials": {
+      "get": {
+        "operationId": "integration_credentials_get_48",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "credentials",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "integration_credential_post_49",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "credentials",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/integrations/credentials/{id}/revoke": {
+      "post": {
+        "operationId": "integration_revoke_post_49",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "revoke",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Must exactly match APP_ALLOWED_ORIGINS."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/integrations/credentials/{id}/rotate": {
+      "post": {
+        "operationId": "integration_rotate_credential",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "Rotate a scoped credential and invalidate its old token immediately",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expiresInDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365,
+                    "default": 30
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One-time new raw token; only its hash is stored"
+          },
+          "403": {
+            "description": "Administrator or entitlement denied"
+          },
+          "404": {
+            "description": "Active credential not found"
+          }
+        }
+      }
+    },
+    "/api/v1/integrations/data/{kind}": {
+      "get": {
+        "operationId": "integration_data_get_51",
+        "tags": [
+          "Integration"
+        ],
+        "summary": "{kind}",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful authorized operation"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Role, scope, origin, entitlement, or object access denied"
+          },
+          "404": {
+            "description": "Authorized resource not found"
+          },
+          "409": {
+            "description": "State, version, replay, quota, quarantine or integrity conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/workflows/definitions/{id}/form": {
+      "get": {
+        "operationId": "workflowextensionscontroller_get_api_v1_org_workflows_definitions_id_form",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "form",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Returns editable draft fields and immutable publishedFields separately, with draft row version and publishedVersion."
+      },
+      "put": {
+        "operationId": "workflowextensionscontroller_put_api_v1_org_workflows_definitions_id_form",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "form",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowFormInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/definitions/{id}/dry-run": {
+      "post": {
+        "operationId": "workflowextensionscontroller_post_api_v1_org_workflows_definitions_id_dry_run",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "dry-run",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "description": "Validates current draft, amount conditions, independent approver availability and typed form data without creating instances, notifications or audit writes."
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/request-changes": {
+      "post": {
+        "operationId": "workflowextensionscontroller_post_api_v1_org_workflows_instances_id_request_changes",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "request-changes",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/workflows/instances/{id}/resubmit": {
+      "post": {
+        "operationId": "workflowextensionscontroller_post_api_v1_org_workflows_instances_id_resubmit",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "resubmit",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "description": "Original requester only. Creates a linked new instance on the original immutable version and preserves the old instance as SUPERSEDED."
+      }
+    },
+    "/api/v1/org/notifications/mentions": {
+      "post": {
+        "operationId": "notificationextensionscontroller_post_api_v1_org_notifications_mentions",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "mentions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "body"
+                ],
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "recipientIds": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "notificationextensionscontroller_get_api_v1_org_notifications_mentions",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "mentions",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/notifications/digest": {
+      "get": {
+        "operationId": "notificationextensionscontroller_get_api_v1_org_notifications_digest",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "digest",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "notificationextensionscontroller_put_api_v1_org_notifications_digest",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "digest",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "cadenceHours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 720,
+                    "default": 24
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/notifications/digest/send": {
+      "post": {
+        "operationId": "notificationextensionscontroller_post_api_v1_org_notifications_digest_send",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "send",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ]
+      }
+    },
+    "/api/v1/org/notifications/digest/history": {
+      "get": {
+        "operationId": "notificationextensionscontroller_get_api_v1_org_notifications_digest_history",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "history",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/dashboard/widgets": {
+      "get": {
+        "operationId": "experiencecontroller_get_api_v1_org_dashboard_widgets",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "widgets",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        }
+      },
+      "put": {
+        "operationId": "experiencecontroller_put_api_v1_org_dashboard_widgets",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "widgets",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "widgets"
+                ],
+                "properties": {
+                  "widgets": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "items": {
+                      "$ref": "#/components/schemas/Widget"
+                    }
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/dashboard/widgets/data": {
+      "get": {
+        "operationId": "experiencecontroller_get_api_v1_org_dashboard_widgets_data",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "data",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "description": "Array of configured own widgets. METRIC data is {count}; CHART data is {series:[{label,value}]}; LIST data is {rows:[safe projections]}. Current source denial returns an error and empty data."
+      }
+    },
+    "/api/v1/org/feature-flags": {
+      "get": {
+        "operationId": "experiencecontroller_get_api_v1_org_feature_flags",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "feature-flags",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/org/feature-flags/{key}": {
+      "put": {
+        "operationId": "experiencecontroller_put_api_v1_org_feature_flags_key",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "{key}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "experiencecontroller_post_api_v1_org_feature_flags_key",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "{key}",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Exact configured same-origin browser origin."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/org/reports/deal-conversion": {
+      "get": {
+        "operationId": "experiencecontroller_get_api_v1_org_reports_deal_conversion",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "deal-conversion",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized persisted result or no-side-effect preview"
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/org/documents/{id}/preview": {
+      "get": {
+        "operationId": "documentpreviewcontroller_get_api_v1_org_documents_id_preview",
+        "tags": [
+          "Automation extensions"
+        ],
+        "summary": "preview",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clean, currently authorized bitmap/PDF/text bytes, inline with sandbox CSP and no-sniff",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid typed schema/data"
+          },
+          "401": {
+            "description": "Sign in required"
+          },
+          "403": {
+            "description": "Role, current custom permission, object, feature or entitlement denied"
+          },
+          "404": {
+            "description": "Authorized record not found"
+          },
+          "409": {
+            "description": "State/version/quarantine conflict"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "EOS_SESSION"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "webhookHmac": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-EOS-Signature"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkflowDefinitionInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "steps"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "approverRole"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "approverRole": {
+                  "type": "string",
+                  "enum": [
+                    "ADMIN",
+                    "HR",
+                    "MANAGER",
+                    "SALES",
+                    "PROCUREMENT",
+                    "FINANCE",
+                    "PAYROLL"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "ANY",
+                    "ALL"
+                  ],
+                  "default": "ANY"
+                },
+                "dueHours": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 720,
+                  "default": 48
+                },
+                "minAmount": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "maxAmount": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "formFields": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowField"
+            }
+          }
+        }
+      },
+      "DocumentUploadInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "dataUrl"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "dataUrl": {
+            "type": "string",
+            "description": "Base64 PDF/PNG/JPEG/WebP/UTF-8 TXT/CSV, decoded size at most 5 MiB."
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "PRIVATE",
+              "HR",
+              "TENANT"
+            ],
+            "default": "PRIVATE"
+          },
+          "linkKind": {
+            "type": "string",
+            "enum": [
+              "employees",
+              "projects"
+            ]
+          },
+          "linkId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "retentionUntil": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "ReportExportInput": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "employees",
+              "projects",
+              "audit",
+              "attendance",
+              "leaves",
+              "inventory",
+              "invoices",
+              "payroll"
+            ]
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "startDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "endDate": {
+                "type": "string",
+                "format": "date"
+              },
+              "status": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "WorkflowField": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "type"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$",
+            "description": "Reserved identity, authorization and property-path keys are rejected."
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "TEXT",
+              "NUMBER",
+              "DATE",
+              "SELECT"
+            ]
+          },
+          "required": {
+            "type": "boolean",
+            "default": false
+          },
+          "options": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "maxLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "default": 500
+          }
+        }
+      },
+      "WorkflowFormInput": {
+        "type": "object",
+        "required": [
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowField"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "WorkflowCaseInput": {
+        "type": "object",
+        "required": [
+          "definitionId",
+          "title"
+        ],
+        "properties": {
+          "definitionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 180
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "formData": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Validated against the immutable latest published schema; unknown keys rejected."
+          }
+        }
+      },
+      "Widget": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "type",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,50}$"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "METRIC",
+              "CHART",
+              "LIST"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "employees",
+              "projects",
+              "attendance",
+              "leaves",
+              "invoices",
+              "inventory"
+            ]
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    }
+  }
+}

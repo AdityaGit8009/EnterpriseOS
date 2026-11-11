@@ -1,0 +1,39 @@
+CREATE TABLE workforce_policies (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, kind VARCHAR(30) NOT NULL,
+ payload JSON NOT NULL, version BIGINT NOT NULL DEFAULT 1, updated_by CHAR(36) NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uq_workforce_policy(tenant_id,kind), FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+) ENGINE=InnoDB;
+CREATE TABLE workforce_requests (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, kind VARCHAR(30) NOT NULL,
+ user_id CHAR(36) NOT NULL, employee_id CHAR(36) NOT NULL, payload JSON NOT NULL,
+ status VARCHAR(30) NOT NULL DEFAULT 'PENDING', reviewed_by CHAR(36), reviewed_at DATETIME(6),
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), completed_at DATETIME(6),
+ INDEX ix_workforce_request(tenant_id,kind,user_id,status), FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+ FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (employee_id) REFERENCES business_records(id)
+) ENGINE=InnoDB;
+CREATE TABLE workforce_credit_postings (
+ request_id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, adjustment_id CHAR(36) NOT NULL UNIQUE,
+ days DECIMAL(10,2) NOT NULL, created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ FOREIGN KEY (request_id) REFERENCES workforce_requests(id), FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+) ENGINE=InnoDB;
+CREATE TABLE workforce_risks (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, project_id CHAR(36) NOT NULL,
+ payload JSON NOT NULL, version BIGINT NOT NULL DEFAULT 1, created_by CHAR(36) NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ INDEX ix_risk_project(tenant_id,project_id), FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (project_id) REFERENCES business_records(id)
+) ENGINE=InnoDB;
+CREATE TABLE recurring_task_templates (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, project_id CHAR(36) NOT NULL,
+ payload JSON NOT NULL, next_date DATE NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE,
+ version BIGINT NOT NULL DEFAULT 1, created_by CHAR(36) NOT NULL, last_error VARCHAR(1000),
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ INDEX ix_recurring_due(tenant_id,enabled,next_date), FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (project_id) REFERENCES business_records(id)
+) ENGINE=InnoDB;
+CREATE TABLE recurring_task_occurrences (
+ id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, template_id CHAR(36) NOT NULL,
+ occurrence_date DATE NOT NULL, task_id CHAR(36) NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uq_recurring_occurrence(tenant_id,template_id,occurrence_date),
+ FOREIGN KEY (template_id) REFERENCES recurring_task_templates(id), FOREIGN KEY (task_id) REFERENCES business_records(id)
+) ENGINE=InnoDB;
