@@ -7,13 +7,104 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationDigestService {
-    private final AutomationSupport s;private final CustomAccessPolicy custom;private final NotificationVisibility visibility;
-    public NotificationDigestService(AutomationSupport s,CustomAccessPolicy custom,NotificationVisibility visibility){this.s=s;this.custom=custom;this.visibility=visibility;}
-    public Map<String,Object> settings(Principal p){s.org(p);var rows=s.db.queryForList("SELECT enabled,cadence_hours AS cadenceHours,next_due_at AS nextDueAt FROM notification_digest_settings WHERE tenant_id=? AND user_id=?",p.tenantId(),p.userId());return rows.isEmpty()?Map.of("enabled",false,"cadenceHours",24):rows.getFirst();}
-    @Transactional public Map<String,Object> configure(Principal p,Map<String,Object> body){s.lock(p,"WORKFLOWS",false);if(!(body.get("enabled") instanceof Boolean))throw new ApiException(400,"Digest enabled must be a boolean.");int cadence=s.integer(body,"cadenceHours",24,1,720);s.db.update("INSERT INTO notification_digest_settings(tenant_id,user_id,enabled,cadence_hours,next_due_at) VALUES (?,?,?,?,TIMESTAMPADD(HOUR,?,UTC_TIMESTAMP(6))) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),cadence_hours=VALUES(cadence_hours),next_due_at=VALUES(next_due_at),updated_at=UTC_TIMESTAMP(6)",p.tenantId(),p.userId(),body.get("enabled"),cadence,cadence);return settings(p);}
-    @Transactional public Map<String,Object> send(Principal p){s.lock(p,"WORKFLOWS",false);if(!custom.allowed(p,"GET","/api/v1/org/notifications"))throw new ApiException(403,"Your custom role cannot read notifications for a digest.");s.db.update("INSERT IGNORE INTO notification_digest_settings(tenant_id,user_id,enabled,cadence_hours,next_due_at) VALUES (?,?,FALSE,24,TIMESTAMPADD(HOUR,24,UTC_TIMESTAMP(6)))",p.tenantId(),p.userId());var setting=s.db.queryForMap("SELECT cadence_hours FROM notification_digest_settings WHERE tenant_id=? AND user_id=? FOR UPDATE",p.tenantId(),p.userId());var notices=s.db.queryForList("SELECT n.id,n.title,n.body,n.event_key FROM notifications n WHERE n.tenant_id=? AND n.user_id=? AND n.read_at IS NULL AND NOT EXISTS (SELECT 1 FROM notification_digest_items i WHERE i.notification_id=n.id AND i.tenant_id=n.tenant_id AND i.user_id=n.user_id) ORDER BY n.created_at,n.id LIMIT 1000",p.tenantId(),p.userId()).stream().filter(row->visibility.allowed(p,row.get("event_key").toString())).limit(100).toList();String id=s.id(),mailId=notices.isEmpty()?null:s.id();if(mailId!=null){StringBuilder body=new StringBuilder("Your unread SolDrashta notifications:\n\n");for(var notice:notices)body.append(notice.get("title")).append('\n').append(notice.get("body")).append("\n\n");s.db.update("INSERT INTO mail_queue(id,recipient,subject,body,status,attempts,next_attempt_at,created_at) VALUES (?,?,?,?,'PENDING',0,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",mailId,p.email(),"Your SolDrashta notification digest",body.toString());}s.db.update("INSERT INTO notification_digest_runs(id,tenant_id,user_id,notification_count,mail_id,status) VALUES (?,?,?,?,?,?)",id,p.tenantId(),p.userId(),notices.size(),mailId,notices.isEmpty()?"EMPTY":"QUEUED");for(var notice:notices)s.db.update("INSERT INTO notification_digest_items(tenant_id,user_id,notification_id,run_id) VALUES (?,?,?,?)",p.tenantId(),p.userId(),notice.get("id"),id);s.db.update("UPDATE notification_digest_settings SET next_due_at=TIMESTAMPADD(HOUR,?,UTC_TIMESTAMP(6)) WHERE tenant_id=? AND user_id=?",setting.get("cadence_hours"),p.tenantId(),p.userId());return Map.of("id",id,"notificationCount",notices.size(),"status",notices.isEmpty()?"EMPTY":"QUEUED");}
-    @Scheduled(fixedDelayString="${APP_DIGEST_POLL_MS:60000}") public void scheduled(){var due=s.db.queryForList("SELECT d.tenant_id,d.user_id,u.name,u.email,m.role FROM notification_digest_settings d JOIN users u ON u.id=d.user_id JOIN memberships m ON m.user_id=d.user_id AND m.tenant_id=d.tenant_id JOIN tenants t ON t.id=d.tenant_id WHERE d.enabled=TRUE AND d.next_due_at<=UTC_TIMESTAMP(6) AND m.status='ACTIVE' AND u.status='ACTIVE' AND t.status='ACTIVE' ORDER BY d.tenant_id,d.user_id LIMIT 10");for(var row:due){Principal p=new Principal(row.get("user_id").toString(),row.get("tenant_id").toString(),row.get("name").toString(),row.get("email").toString(),row.get("role").toString());try{queueTransactional(p);}catch(ApiException ex){/* Invalid current permissions/subscription pause the occurrence without disclosing data. */}}}
-    private void queueTransactional(Principal p){/* self-invoked scheduling enters an explicit transaction through the template */new org.springframework.transaction.support.TransactionTemplate(transactionManager()).execute(status->{send(p);return null;});}
-    @org.springframework.beans.factory.annotation.Autowired private org.springframework.transaction.PlatformTransactionManager manager;
-    private org.springframework.transaction.PlatformTransactionManager transactionManager(){return manager;}
+    private final AutomationSupport s;
+    private final CustomAccessPolicy custom;
+    private final NotificationVisibility visibility;
+
+    public NotificationDigestService(AutomationSupport s, CustomAccessPolicy custom,
+            NotificationVisibility visibility) {
+        this.s = s;
+        this.custom = custom;
+        this.visibility = visibility;
+    }
+
+    public Map<String, Object> settings(Principal p) {
+        s.org(p);
+        var rows = s.db.queryForList(
+                "SELECT enabled,cadence_hours AS cadenceHours,next_due_at AS nextDueAt FROM notification_digest_settings WHERE tenant_id=? AND user_id=?",
+                p.tenantId(), p.userId());
+        return rows.isEmpty() ? Map.of("enabled", false, "cadenceHours", 24) : rows.getFirst();
+    }
+
+    @Transactional
+    public Map<String, Object> configure(Principal p, Map<String, Object> body) {
+        s.lock(p, "WORKFLOWS", false);
+        if (!(body.get("enabled") instanceof Boolean))
+            throw new ApiException(400, "Digest enabled must be a boolean.");
+        int cadence = s.integer(body, "cadenceHours", 24, 1, 720);
+        s.db.update(
+                "INSERT INTO notification_digest_settings(tenant_id,user_id,enabled,cadence_hours,next_due_at) VALUES (?,?,?,?,TIMESTAMPADD(HOUR,?,UTC_TIMESTAMP(6))) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),cadence_hours=VALUES(cadence_hours),next_due_at=VALUES(next_due_at),updated_at=UTC_TIMESTAMP(6)",
+                p.tenantId(), p.userId(), body.get("enabled"), cadence, cadence);
+        return settings(p);
+    }
+
+    @Transactional
+    public Map<String, Object> send(Principal p) {
+        s.lock(p, "WORKFLOWS", false);
+        if (!custom.allowed(p, "GET", "/api/v1/org/notifications"))
+            throw new ApiException(403, "Your custom role cannot read notifications for a digest.");
+        s.db.update(
+                "INSERT IGNORE INTO notification_digest_settings(tenant_id,user_id,enabled,cadence_hours,next_due_at) VALUES (?,?,FALSE,24,TIMESTAMPADD(HOUR,24,UTC_TIMESTAMP(6)))",
+                p.tenantId(), p.userId());
+        var setting = s.db.queryForMap(
+                "SELECT cadence_hours FROM notification_digest_settings WHERE tenant_id=? AND user_id=? FOR UPDATE",
+                p.tenantId(), p.userId());
+        var notices = s.db.queryForList(
+                "SELECT n.id,n.title,n.body,n.event_key FROM notifications n WHERE n.tenant_id=? AND n.user_id=? AND n.read_at IS NULL AND NOT EXISTS (SELECT 1 FROM notification_digest_items i WHERE i.notification_id=n.id AND i.tenant_id=n.tenant_id AND i.user_id=n.user_id) ORDER BY n.created_at,n.id LIMIT 1000",
+                p.tenantId(), p.userId()).stream().filter(row -> visibility.allowed(p, row.get("event_key").toString()))
+                .limit(100).toList();
+        String id = s.id(), mailId = notices.isEmpty() ? null : s.id();
+        if (mailId != null) {
+            StringBuilder body = new StringBuilder("Your unread SolDrashta notifications:\n\n");
+            for (var notice : notices)
+                body.append(notice.get("title")).append('\n').append(notice.get("body")).append("\n\n");
+            s.db.update(
+                    "INSERT INTO mail_queue(id,recipient,subject,body,status,attempts,next_attempt_at,created_at) VALUES (?,?,?,?,'PENDING',0,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6))",
+                    mailId, p.email(), "Your SolDrashta notification digest", body.toString());
+        }
+        s.db.update(
+                "INSERT INTO notification_digest_runs(id,tenant_id,user_id,notification_count,mail_id,status) VALUES (?,?,?,?,?,?)",
+                id, p.tenantId(), p.userId(), notices.size(), mailId, notices.isEmpty() ? "EMPTY" : "QUEUED");
+        for (var notice : notices)
+            s.db.update(
+                    "INSERT INTO notification_digest_items(tenant_id,user_id,notification_id,run_id) VALUES (?,?,?,?)",
+                    p.tenantId(), p.userId(), notice.get("id"), id);
+        s.db.update(
+                "UPDATE notification_digest_settings SET next_due_at=TIMESTAMPADD(HOUR,?,UTC_TIMESTAMP(6)) WHERE tenant_id=? AND user_id=?",
+                setting.get("cadence_hours"), p.tenantId(), p.userId());
+        return Map.of("id", id, "notificationCount", notices.size(), "status", notices.isEmpty() ? "EMPTY" : "QUEUED");
+    }
+
+    @Scheduled(fixedDelayString = "${APP_DIGEST_POLL_MS:60000}")
+    public void scheduled() {
+        var due = s.db.queryForList(
+                "SELECT d.tenant_id,d.user_id,u.name,u.email,m.role FROM notification_digest_settings d JOIN users u ON u.id=d.user_id JOIN memberships m ON m.user_id=d.user_id AND m.tenant_id=d.tenant_id JOIN tenants t ON t.id=d.tenant_id WHERE d.enabled=TRUE AND d.next_due_at<=UTC_TIMESTAMP(6) AND m.status='ACTIVE' AND u.status='ACTIVE' AND t.status='ACTIVE' ORDER BY d.tenant_id,d.user_id LIMIT 10");
+        for (var row : due) {
+            Principal p = new Principal(row.get("user_id").toString(), row.get("tenant_id").toString(),
+                    row.get("name").toString(), row.get("email").toString(), row.get("role").toString());
+            try {
+                queueTransactional(p);
+            } catch (ApiException ex) {
+                /*
+                 * Invalid current permissions/subscription pause the occurrence without
+                 * disclosing data.
+                 */}
+        }
+    }
+
+    private void queueTransactional(Principal p) {
+        /*
+         * self-invoked scheduling enters an explicit transaction through the template
+         */new org.springframework.transaction.support.TransactionTemplate(transactionManager()).execute(status -> {
+            send(p);
+            return null;
+        });
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.transaction.PlatformTransactionManager manager;
+
+    private org.springframework.transaction.PlatformTransactionManager transactionManager() {
+        return manager;
+    }
 }

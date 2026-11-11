@@ -12,39 +12,426 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(properties={"app.seed-demo=false","app.business-reminders-enabled=false"})
+@SpringBootTest(properties = { "app.seed-demo=false", "app.business-reminders-enabled=false" })
 @EnabledIf("com.enterpriseos.TestDatabase#available")
 class BusinessIntegrationTest {
-    @DynamicPropertySource static void database(DynamicPropertyRegistry r){TestDatabase.configure(r);}
-    @Autowired BusinessController business;@Autowired OperationsController workforce;@Autowired JdbcTemplate db;
-    Principal admin,sales,procurement,finance,payroll,manager,member,other;String tenant;
-    String uuid(){return UUID.randomUUID().toString();}
-    @BeforeEach void seed(){tenant=uuid();db.update("INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','Asia/Kolkata',UTC_TIMESTAMP(6))",tenant,"SolDrashta",tenant);admin=user("ADMIN");sales=user("SALES");procurement=user("PROCUREMENT");finance=user("FINANCE");payroll=user("PAYROLL");manager=user("MANAGER");member=user("MEMBER");other=user("MEMBER");}
-    Principal user(String role){String id=uuid();db.update("INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES(?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))",id,role,id+"@test.invalid","unused");db.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES(?,?,?,?,'ACTIVE')",uuid(),tenant,id,role);return new Principal(id,tenant,role,id+"@test.invalid",role);}
-    Map<String,Object> create(Principal p,String kind,Map<String,Object> body){return business.create(p,kind,body);}
-    String rid(Map<String,Object> row){return row.get("id").toString();}
-    Map<String,Object> item(){return create(procurement,"items",Map.of("name","Steel component","sku",uuid(),"currency","INR","reorderPoint",1));}
-    Map<String,Object> warehouse(String name){return create(procurement,"warehouses",Map.of("name",name,"currency","INR"));}
-    Map<String,Object> line(String item,int quantity,int price){return Map.of("itemId",item,"quantity",quantity,"unitPrice",price);}
-
-    @Test void concurrentStockIssuesCannotOverspendAndReplayIsStable() throws Exception {
-        String item=rid(item()),warehouse=rid(warehouse("Main"));Map<String,Object> receipt=Map.of("itemId",item,"warehouseId",warehouse,"type","RECEIPT","quantity",5,"unitCost",10,"reason","Opening","idempotencyKey","opening");
-        Map<String,Object> posted=business.movement(procurement,receipt);assertEquals(posted.get("id"),business.movement(procurement,receipt).get("id"));
-        try(ExecutorService executor=Executors.newFixedThreadPool(2)){CountDownLatch start=new CountDownLatch(1);List<Future<Integer>> futures=new ArrayList<>();for(int n=0;n<2;n++){String key="issue-"+n;futures.add(executor.submit(()->{start.await();try{business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","ISSUE","quantity",4,"reason","Consumed","idempotencyKey",key));return 200;}catch(ApiException e){return e.status();}}));}start.countDown();List<Integer> codes=new ArrayList<>();for(Future<Integer> f:futures)codes.add(f.get(15,TimeUnit.SECONDS));Collections.sort(codes);assertEquals(List.of(200,409),codes);}
-        Map<String,Object> stock=business.stock(procurement).getFirst();assertEquals(0,new BigDecimal("1").compareTo((BigDecimal)stock.get("quantity")));assertEquals(0,new BigDecimal("10").compareTo((BigDecimal)stock.get("inventoryValue")));assertEquals(2,business.movements(procurement).size());
+    @DynamicPropertySource
+    static void database(DynamicPropertyRegistry r) {
+        TestDatabase.configure(r);
     }
-    @Test void stockTransfersPreserveValueAndChangedIdempotencyDataIsDenied(){String item=rid(item()),from=rid(warehouse("From")),to=rid(warehouse("To"));business.movement(procurement,Map.of("itemId",item,"warehouseId",from,"type","RECEIPT","quantity",10,"unitCost",12,"reason","Opening","idempotencyKey","receipt"));Map<String,Object> transfer=Map.of("itemId",item,"warehouseId",from,"toWarehouseId",to,"type","TRANSFER","quantity",4,"reason","Restock","idempotencyKey","transfer");business.movement(procurement,transfer);BigDecimal value=business.stock(procurement).stream().map(r->(BigDecimal)r.get("inventoryValue")).reduce(BigDecimal.ZERO,BigDecimal::add);assertEquals(0,new BigDecimal("120").compareTo(value));Map<String,Object> altered=new LinkedHashMap<>(transfer);altered.put("quantity",3);assertEquals(409,assertThrows(ApiException.class,()->business.movement(procurement,altered)).status());}
-    @Test void purchaseReceiptAndReturnRespectApprovedOutstandingQuantities(){String item=rid(item()),warehouse=rid(warehouse("Main"));String supplier=rid(create(procurement,"suppliers",Map.of("name","Supplier")));Map<String,Object> order=create(admin,"purchaseOrders",Map.of("name","PO","supplierId",supplier,"lines",List.of(line(item,3,20))));assertEquals(403,assertThrows(ApiException.class,()->business.approveOrder(admin,rid(order))).status());business.approveOrder(procurement,rid(order));Map<String,Object> receipt=business.receive(procurement,Map.of("orderId",rid(order),"warehouseId",warehouse,"lines",List.of(Map.of("itemId",item,"quantity",2)),"idempotencyKey","r1"));assertEquals(409,assertThrows(ApiException.class,()->business.receive(procurement,Map.of("orderId",rid(order),"warehouseId",warehouse,"lines",List.of(Map.of("itemId",item,"quantity",2)),"idempotencyKey","r2"))).status());business.returnGoods(procurement,Map.of("receiptId",rid(receipt),"lines",List.of(Map.of("itemId",item,"quantity",1)),"reason","Damaged","idempotencyKey","return"));assertEquals(0,BigDecimal.ONE.compareTo((BigDecimal)business.stock(procurement).getFirst().get("quantity")));assertEquals(409,assertThrows(ApiException.class,()->business.returnGoods(procurement,Map.of("receiptId",rid(receipt),"lines",List.of(Map.of("itemId",item,"quantity",2)),"reason","Damaged","idempotencyKey","too-many"))).status());}
-    @Test void quoteConversionPreservesRoundedGstAndInvoicePostingsAreImmutable(){String account=rid(create(sales,"accounts",Map.of("name","Customer")));Map<String,Object> quote=create(admin,"quotes",Map.of("name","Quote","accountId",account,"ownerId",sales.userId(),"currency","INR","taxMode","GST_INTRA","sellerGstin","27ABCDE1234F1Z5","buyerGstin","27BCDEF1234G1Z5","placeOfSupply","27","lines",List.of(Map.of("description","Service","quantity",2,"unitPrice",100,"discount",10,"taxRate",18))));assertEquals(0,new BigDecimal("224.20").compareTo((BigDecimal)quote.get("total")));business.approveQuote(sales,rid(quote));Map<String,Object> invoice=business.quoteInvoice(finance,rid(quote));assertEquals(quote.get("lines"),invoice.get("lines"));assertEquals("GST_INTRA",invoice.get("taxMode"));invoice=business.issueInvoice(finance,rid(invoice));String invoiceId=rid(invoice);assertTrue(new String(business.invoicePdf(finance,invoiceId).getBody(),java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF-1.4"));Map<String,Object> payment=Map.of("amount",100,"reference","Bank statement 1","idempotencyKey","p1");business.payment(finance,invoiceId,payment);business.payment(finance,invoiceId,payment);assertEquals(1,business.invoiceEntries(finance,invoiceId).size());business.credit(finance,invoiceId,Map.of("amount",24.20,"reason","Agreed credit","idempotencyKey","c1"));Map<String,Object> paid=business.payment(finance,invoiceId,Map.of("amount",100,"reference","Bank statement 2","idempotencyKey","p2"));assertEquals("PAID",paid.get("status"));assertEquals(409,assertThrows(ApiException.class,()->business.update(finance,"invoices",invoiceId,Map.of("version",paid.get("version"),"name","Tampered"))).status());assertEquals("PARTIALLY_PAID",business.refund(finance,invoiceId,Map.of("amount",50,"reference","External refund recorded","idempotencyKey","refund")).get("status"));}
-    @Test void expenseRequiresDistinctManagerAndFinanceThenBudgetCap(){Map<String,Object> budget=create(finance,"budgets",Map.of("name","Travel","amount",50,"startDate","2020-01-01","endDate","2200-01-01"));String id=rid(create(member,"expenses",Map.of("name","Taxi","budgetId",rid(budget),"lines",List.of(Map.of("description","Taxi","quantity",1,"unitPrice",40)))));business.submitExpense(member,id);assertEquals("MANAGER_APPROVED",business.expenseDecision(manager,id,Map.of("decision","APPROVED")).get("status"));assertEquals("APPROVED",business.expenseDecision(finance,id,Map.of("decision","APPROVED")).get("status"));String second=rid(create(member,"expenses",Map.of("name","Taxi2","budgetId",rid(budget),"lines",List.of(Map.of("description","Taxi","quantity",1,"unitPrice",40)))));business.submitExpense(member,second);business.expenseDecision(manager,second,Map.of("decision","APPROVED"));assertEquals(409,assertThrows(ApiException.class,()->business.expenseDecision(finance,second,Map.of("decision","APPROVED"))).status());assertEquals(403,assertThrows(ApiException.class,()->business.expenseDecision(member,second,Map.of("decision","APPROVED"))).status());}
-    @Test void payrollFreezesCalculatedInputsRequiresCheckerAndRestrictsPayslips(){Map<String,Object> employee=workforce.create(admin,"employees",Map.of("name","Employee","employeeCode","E1","userId",member.userId(),"joinDate","2027-01-01"));create(payroll,"compensations",Map.of("name","Monthly salary","employeeId",rid(employee),"effectiveFrom","2027-01-01","baseSalary",31000,"currency","INR","bankAccount","1234567890"));Map<String,Object> run=create(payroll,"payrollRuns",Map.of("name","January payroll","periodStart","2027-01-01","periodEnd","2027-01-31","currency","INR"));business.calculate(payroll,rid(run));assertEquals(403,assertThrows(ApiException.class,()->business.reviewPayroll(payroll,rid(run))).status());business.reviewPayroll(finance,rid(run));Map<String,Object> finalized=business.finalizePayroll(finance,rid(run));assertEquals(0,new BigDecimal("31000.00").compareTo((BigDecimal)finalized.get("total")));assertEquals(409,assertThrows(ApiException.class,()->business.calculate(payroll,rid(run))).status());assertEquals(1,business.payslips(member).size());String payslipId=business.payslips(member).getFirst().get("id").toString();assertTrue(new String(business.payslipPdf(member,payslipId).getBody(),java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF-1.4"));assertEquals(403,assertThrows(ApiException.class,()->business.payslipPdf(other,payslipId)).status());assertTrue(business.payslips(other).isEmpty());assertEquals(403,assertThrows(ApiException.class,()->business.payrollEntries(member,rid(run))).status());assertTrue(business.bankExport(finance,rid(run)).getBody().contains("31000.00"));Map<String,Object> adjustment=business.adjustPayroll(payroll,rid(run),Map.of("employeeId",rid(employee),"amount",-100,"reason","Recovery correction"));business.reviewPayroll(finance,rid(adjustment));business.finalizePayroll(finance,rid(adjustment));assertEquals(2,business.payslips(member).size());assertEquals(0,new BigDecimal("31000.00").compareTo((BigDecimal)business.payrollEntries(finance,rid(run)).getFirst().get("net")));}
-    @Test void businessRolesAndTenantReferencesAreEnforced(){String tenantB=uuid();db.update("INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','UTC',UTC_TIMESTAMP(6))",tenantB,"Other",tenantB);String foreignId=uuid();db.update("INSERT INTO business_entities(id,tenant_id,kind,payload,status,currency,created_by,updated_by) VALUES(?,?,? ,?,'ACTIVE','INR',?,?)",foreignId,tenantB,"accounts","{\"name\":\"Private\"}",admin.userId(),admin.userId());assertEquals(404,assertThrows(ApiException.class,()->create(sales,"contacts",Map.of("name","Contact","accountId",foreignId))).status());assertEquals(403,assertThrows(ApiException.class,()->business.records(member,"accounts","",0,100)).status());assertEquals(403,assertThrows(ApiException.class,()->create(sales,"items",Map.of("name","Forbidden","sku","X"))).status());}
-    @Test void reservationsProtectAvailabilityAndCycleCountsRequireAnotherReviewer(){String item=rid(item()),warehouse=rid(warehouse("Main"));business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","RECEIPT","quantity",5,"unitCost",10,"reason","Opening","idempotencyKey","open"));Map<String,Object> reservation=create(procurement,"stockReservations",Map.of("name","Order hold","itemId",item,"warehouseId",warehouse,"quantity",4));business.reserve(procurement,rid(reservation));assertEquals(409,assertThrows(ApiException.class,()->business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","ISSUE","quantity",2,"reason","Other request","idempotencyKey","blocked"))).status());business.consume(procurement,rid(reservation),Map.of());assertEquals(0,BigDecimal.ONE.compareTo((BigDecimal)business.stock(procurement).getFirst().get("quantity")));Map<String,Object> count=create(procurement,"inventoryCounts",Map.of("name","Count","warehouseId",warehouse,"lines",List.of(Map.of("itemId",item,"countedQuantity",3))));assertEquals(403,assertThrows(ApiException.class,()->business.approveCount(procurement,rid(count))).status());business.approveCount(admin,rid(count));assertEquals(0,new BigDecimal("3").compareTo((BigDecimal)business.stock(procurement).getFirst().get("quantity")));}
-    @Test void fifoAndSerialPostingsPreserveExactValueAndUniqueness(){String item=rid(create(procurement,"items",Map.of("name","FIFO","sku",uuid(),"valuationMethod","FIFO"))),warehouse=rid(warehouse("FIFO store"));business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","RECEIPT","quantity",2,"unitCost",10,"batch","LOT-A","reason","Opening","idempotencyKey","lot-a"));business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","RECEIPT","quantity",2,"unitCost",20,"batch","LOT-B","reason","Opening","idempotencyKey","lot-b"));business.movement(procurement,Map.of("itemId",item,"warehouseId",warehouse,"type","ISSUE","quantity",3,"reason","FIFO issue","idempotencyKey","fifo-out"));assertEquals(0,new BigDecimal("20").compareTo((BigDecimal)business.stock(procurement).getFirst().get("inventoryValue")));String serialItem=rid(create(procurement,"items",Map.of("name","Serialized","sku",uuid(),"serialTracked",true)));Map<String,Object> serialReceipt=Map.of("itemId",serialItem,"warehouseId",warehouse,"type","RECEIPT","quantity",1,"unitCost",5,"serialNumbers",List.of("SN-1"),"reason","Receive","idempotencyKey","serial");business.movement(procurement,serialReceipt);Map<String,Object> duplicate=new LinkedHashMap<>(serialReceipt);duplicate.put("idempotencyKey","serial-duplicate");assertEquals(409,assertThrows(ApiException.class,()->business.movement(procurement,duplicate)).status());assertFalse(((List<?>)business.traceability(procurement).get("serials")).isEmpty());}
-    @Test void fiscalCloseAndPurchaseBudgetsRejectFurtherPosting(){String item=rid(item()),supplier=rid(create(procurement,"suppliers",Map.of("name","Vendor")));Map<String,Object> budget=create(finance,"budgets",Map.of("name","Cap","amount",10,"startDate","2020-01-01","endDate","2200-01-01"));Map<String,Object> po=create(procurement,"purchaseOrders",Map.of("name","PO","supplierId",supplier,"budgetId",rid(budget),"lines",List.of(line(item,2,10))));assertEquals(409,assertThrows(ApiException.class,()->business.approveOrder(admin,rid(po))).status());Map<String,Object> period=create(finance,"financialPeriods",Map.of("name","Current","startDate",java.time.LocalDate.now().withDayOfMonth(1).toString(),"endDate",java.time.LocalDate.now().withDayOfMonth(java.time.LocalDate.now().lengthOfMonth()).toString()));business.closePeriod(finance,rid(period),Map.of("reason","Period close"));String account=rid(create(sales,"accounts",Map.of("name","Customer")));Map<String,Object> invoice=create(finance,"invoices",Map.of("name","Invoice","accountId",account,"lines",List.of(Map.of("description","Service","quantity",1,"unitPrice",10))));assertEquals(409,assertThrows(ApiException.class,()->business.issueInvoice(finance,rid(invoice))).status());business.reopenPeriod(finance,rid(period),Map.of("reason","Approved correction"));assertEquals("ISSUED",business.issueInvoice(finance,rid(invoice)).get("status"));}
-    @Test void rfqComparisonAwardAndContractPriceAreEnforced(){String item=rid(item()),supplier=rid(create(procurement,"suppliers",Map.of("name","Vendor")));Map<String,Object> rfq=create(procurement,"rfqs",Map.of("name","Request","supplierIds",List.of(supplier),"lines",List.of(line(item,2,0))));Map<String,Object> quote=create(procurement,"supplierQuotes",Map.of("name","Vendor quote","rfqId",rid(rfq),"supplierId",supplier,"lines",List.of(line(item,2,12))));assertEquals(1,business.quoteComparison(procurement,rid(rfq)).size());assertEquals("DRAFT",business.awardQuote(admin,rid(quote)).get("status"));Map<String,Object> contract=create(procurement,"supplierContracts",Map.of("name","Contract","supplierId",supplier,"startDate","2020-01-01","endDate","2200-01-01","lines",List.of(line(item,1,10))));assertEquals(409,assertThrows(ApiException.class,()->create(procurement,"purchaseOrders",Map.of("name","Wrong price","supplierId",supplier,"contractId",rid(contract),"lines",List.of(line(item,1,11))))).status());}
-    @Test void domainStaffKeepOwnAttendanceLeaveAndProfileWithoutHrAuthority(){for(Principal staff:List.of(sales,procurement,finance,payroll)){Map<String,Object> employee=workforce.create(admin,"employees",Map.of("name",staff.role(),"employeeCode",staff.role(),"userId",staff.userId()));Map<String,Object> profile=workforce.update(staff,"employees",rid(employee),Map.of("version",1,"phone","9000000000"));assertEquals("9000000000",profile.get("phone"));assertEquals("CHECKED_IN",workforce.checkIn(staff).get("status"));workforce.checkOut(staff);assertEquals(403,assertThrows(ApiException.class,()->workforce.create(staff,"departments",Map.of("name","Forbidden"))).status());}workforce.create(admin,"leavePolicies",Map.of("name","Annual","annualDays",20));Map<String,Object> request=workforce.requestLeave(sales,Map.of("type","Annual","startDate","2027-01-04","endDate","2027-01-04","reason","Personal"));assertEquals("PENDING",request.get("status"));}
-    @Test void crmForecastLostReasonAndOwnerIsolationAreEnforced(){String stage=rid(create(sales,"pipelineStages",Map.of("name","Qualified","probability",25,"outcome","OPEN"))),lost=rid(create(sales,"pipelineStages",Map.of("name","Lost","probability",0,"outcome","LOST")));Map<String,Object> deal=create(sales,"opportunities",Map.of("name","Deal","stageId",stage,"amount",1000,"expectedCloseDate","2027-01-15"));Collection<?> forecast=(Collection<?>)business.crmSummary(sales).get("forecasts");assertEquals(1,forecast.size());Map<?,?> row=(Map<?,?>)forecast.iterator().next();assertEquals(0,new BigDecimal("250").compareTo((BigDecimal)row.get("weightedAmount")));Principal unrelated=user("SALES");assertTrue(business.records(unrelated,"opportunities","",0,100).isEmpty());assertEquals(403,assertThrows(ApiException.class,()->business.opportunityStage(unrelated,rid(deal),Map.of("stageId",lost,"reason","Private"))).status());assertEquals(400,assertThrows(ApiException.class,()->business.opportunityStage(sales,rid(deal),Map.of("stageId",lost))).status());business.opportunityStage(sales,rid(deal),Map.of("stageId",lost,"reason","Budget"));assertEquals(1,((Map<?,?>)business.crmSummary(sales).get("lostReasons")).get("Budget"));}
-    @Test void overdueReminderIsQueuedOncePerDayAndContractRenewalPreservesOriginal(){String account=rid(create(sales,"accounts",Map.of("name","Customer","email","customer@test.invalid")));Map<String,Object> invoice=create(finance,"invoices",Map.of("name","Overdue","accountId",account,"dueDate",java.time.LocalDate.now().minusDays(1).toString(),"lines",List.of(Map.of("description","Service","quantity",1,"unitPrice",10))));business.issueInvoice(finance,rid(invoice));assertEquals(1,business.invoiceReminders(finance).get("queued"));assertEquals(0,business.invoiceReminders(finance).get("queued"));assertEquals(1,business.reminderHistory(finance,rid(invoice)).size());Map<String,Object> contract=create(sales,"customerContracts",Map.of("name","Support","accountId",account,"startDate","2027-01-01","endDate","2027-12-31"));Map<String,Object> next=business.renewContract(sales,rid(contract),Map.of("startDate","2028-01-01","endDate","2028-12-31"));assertEquals(rid(contract),next.get("renewalOf"));assertEquals("ACTIVE",next.get("status"));assertEquals(409,assertThrows(ApiException.class,()->business.renewContract(sales,rid(contract),Map.of("startDate","2029-01-01","endDate","2029-12-31"))).status());}
-    @Test void requiredInvoiceReviewCannotBeForgedAndUnissuedReviewsDoNotConsumeNumbers(){String account=rid(create(sales,"accounts",Map.of("name","Customer")));Map<String,Object> body=Map.of("name","Controlled invoice","accountId",account,"requireReview",true,"invoiceNumber","INV-TAMPER","status","REVIEWED","reviewedBy",admin.userId(),"lines",List.of(Map.of("description","Service","quantity",1,"unitPrice",10)));Map<String,Object> first=create(finance,"invoices",body),second=create(finance,"invoices",body);assertEquals("DRAFT",first.get("status"));assertEquals(409,assertThrows(ApiException.class,()->business.issueInvoice(finance,rid(first))).status());assertEquals(403,assertThrows(ApiException.class,()->business.reviewInvoice(finance,rid(first))).status());business.reviewInvoice(admin,rid(first));business.reviewInvoice(admin,rid(second));Map<String,Object> issuedFirst=business.issueInvoice(finance,rid(first)),issuedSecond=business.issueInvoice(finance,rid(second));assertTrue(issuedFirst.get("invoiceNumber").toString().endsWith("000001"));assertTrue(issuedSecond.get("invoiceNumber").toString().endsWith("000002"));assertNotEquals("INV-TAMPER",issuedFirst.get("invoiceNumber"));assertEquals(409,assertThrows(ApiException.class,()->business.update(finance,"invoices",rid(first),Map.of("version",issuedFirst.get("version"),"invoiceNumber","FORGED"))).status());}
+
+    @Autowired
+    BusinessController business;
+    @Autowired
+    OperationsController workforce;
+    @Autowired
+    JdbcTemplate db;
+    Principal admin, sales, procurement, finance, payroll, manager, member, other;
+    String tenant;
+
+    String uuid() {
+        return UUID.randomUUID().toString();
+    }
+
+    @BeforeEach
+    void seed() {
+        tenant = uuid();
+        db.update(
+                "INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','Asia/Kolkata',UTC_TIMESTAMP(6))",
+                tenant, "SolDrashta", tenant);
+        admin = user("ADMIN");
+        sales = user("SALES");
+        procurement = user("PROCUREMENT");
+        finance = user("FINANCE");
+        payroll = user("PAYROLL");
+        manager = user("MANAGER");
+        member = user("MEMBER");
+        other = user("MEMBER");
+    }
+
+    Principal user(String role) {
+        String id = uuid();
+        db.update(
+                "INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES(?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))",
+                id, role, id + "@test.invalid", "unused");
+        db.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES(?,?,?,?,'ACTIVE')", uuid(), tenant,
+                id, role);
+        return new Principal(id, tenant, role, id + "@test.invalid", role);
+    }
+
+    Map<String, Object> create(Principal p, String kind, Map<String, Object> body) {
+        return business.create(p, kind, body);
+    }
+
+    String rid(Map<String, Object> row) {
+        return row.get("id").toString();
+    }
+
+    Map<String, Object> item() {
+        return create(procurement, "items",
+                Map.of("name", "Steel component", "sku", uuid(), "currency", "INR", "reorderPoint", 1));
+    }
+
+    Map<String, Object> warehouse(String name) {
+        return create(procurement, "warehouses", Map.of("name", name, "currency", "INR"));
+    }
+
+    Map<String, Object> line(String item, int quantity, int price) {
+        return Map.of("itemId", item, "quantity", quantity, "unitPrice", price);
+    }
+
+    @Test
+    void concurrentStockIssuesCannotOverspendAndReplayIsStable() throws Exception {
+        String item = rid(item()), warehouse = rid(warehouse("Main"));
+        Map<String, Object> receipt = Map.of("itemId", item, "warehouseId", warehouse, "type", "RECEIPT", "quantity", 5,
+                "unitCost", 10, "reason", "Opening", "idempotencyKey", "opening");
+        Map<String, Object> posted = business.movement(procurement, receipt);
+        assertEquals(posted.get("id"), business.movement(procurement, receipt).get("id"));
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (int n = 0; n < 2; n++) {
+                String key = "issue-" + n;
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    try {
+                        business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type", "ISSUE",
+                                "quantity", 4, "reason", "Consumed", "idempotencyKey", key));
+                        return 200;
+                    } catch (ApiException e) {
+                        return e.status();
+                    }
+                }));
+            }
+            start.countDown();
+            List<Integer> codes = new ArrayList<>();
+            for (Future<Integer> f : futures)
+                codes.add(f.get(15, TimeUnit.SECONDS));
+            Collections.sort(codes);
+            assertEquals(List.of(200, 409), codes);
+        }
+        Map<String, Object> stock = business.stock(procurement).getFirst();
+        assertEquals(0, new BigDecimal("1").compareTo((BigDecimal) stock.get("quantity")));
+        assertEquals(0, new BigDecimal("10").compareTo((BigDecimal) stock.get("inventoryValue")));
+        assertEquals(2, business.movements(procurement).size());
+    }
+
+    @Test
+    void stockTransfersPreserveValueAndChangedIdempotencyDataIsDenied() {
+        String item = rid(item()), from = rid(warehouse("From")), to = rid(warehouse("To"));
+        business.movement(procurement, Map.of("itemId", item, "warehouseId", from, "type", "RECEIPT", "quantity", 10,
+                "unitCost", 12, "reason", "Opening", "idempotencyKey", "receipt"));
+        Map<String, Object> transfer = Map.of("itemId", item, "warehouseId", from, "toWarehouseId", to, "type",
+                "TRANSFER", "quantity", 4, "reason", "Restock", "idempotencyKey", "transfer");
+        business.movement(procurement, transfer);
+        BigDecimal value = business.stock(procurement).stream().map(r -> (BigDecimal) r.get("inventoryValue"))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(0, new BigDecimal("120").compareTo(value));
+        Map<String, Object> altered = new LinkedHashMap<>(transfer);
+        altered.put("quantity", 3);
+        assertEquals(409, assertThrows(ApiException.class, () -> business.movement(procurement, altered)).status());
+    }
+
+    @Test
+    void purchaseReceiptAndReturnRespectApprovedOutstandingQuantities() {
+        String item = rid(item()), warehouse = rid(warehouse("Main"));
+        String supplier = rid(create(procurement, "suppliers", Map.of("name", "Supplier")));
+        Map<String, Object> order = create(admin, "purchaseOrders",
+                Map.of("name", "PO", "supplierId", supplier, "lines", List.of(line(item, 3, 20))));
+        assertEquals(403, assertThrows(ApiException.class, () -> business.approveOrder(admin, rid(order))).status());
+        business.approveOrder(procurement, rid(order));
+        Map<String, Object> receipt = business.receive(procurement, Map.of("orderId", rid(order), "warehouseId",
+                warehouse, "lines", List.of(Map.of("itemId", item, "quantity", 2)), "idempotencyKey", "r1"));
+        assertEquals(409,
+                assertThrows(ApiException.class,
+                        () -> business.receive(procurement,
+                                Map.of("orderId", rid(order), "warehouseId", warehouse, "lines",
+                                        List.of(Map.of("itemId", item, "quantity", 2)), "idempotencyKey", "r2")))
+                        .status());
+        business.returnGoods(procurement, Map.of("receiptId", rid(receipt), "lines",
+                List.of(Map.of("itemId", item, "quantity", 1)), "reason", "Damaged", "idempotencyKey", "return"));
+        assertEquals(0, BigDecimal.ONE.compareTo((BigDecimal) business.stock(procurement).getFirst().get("quantity")));
+        assertEquals(409,
+                assertThrows(ApiException.class,
+                        () -> business.returnGoods(procurement,
+                                Map.of("receiptId", rid(receipt), "lines",
+                                        List.of(Map.of("itemId", item, "quantity", 2)), "reason", "Damaged",
+                                        "idempotencyKey", "too-many")))
+                        .status());
+    }
+
+    @Test
+    void quoteConversionPreservesRoundedGstAndInvoicePostingsAreImmutable() {
+        String account = rid(create(sales, "accounts", Map.of("name", "Customer")));
+        Map<String, Object> quote = create(admin, "quotes",
+                Map.of("name", "Quote", "accountId", account, "ownerId", sales.userId(), "currency", "INR", "taxMode",
+                        "GST_INTRA", "sellerGstin", "27ABCDE1234F1Z5", "buyerGstin", "27BCDEF1234G1Z5", "placeOfSupply",
+                        "27", "lines", List.of(Map.of("description", "Service", "quantity", 2, "unitPrice", 100,
+                                "discount", 10, "taxRate", 18))));
+        assertEquals(0, new BigDecimal("224.20").compareTo((BigDecimal) quote.get("total")));
+        business.approveQuote(sales, rid(quote));
+        Map<String, Object> invoice = business.quoteInvoice(finance, rid(quote));
+        assertEquals(quote.get("lines"), invoice.get("lines"));
+        assertEquals("GST_INTRA", invoice.get("taxMode"));
+        invoice = business.issueInvoice(finance, rid(invoice));
+        String invoiceId = rid(invoice);
+        assertTrue(new String(business.invoicePdf(finance, invoiceId).getBody(),
+                java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF-1.4"));
+        Map<String, Object> payment = Map.of("amount", 100, "reference", "Bank statement 1", "idempotencyKey", "p1");
+        business.payment(finance, invoiceId, payment);
+        business.payment(finance, invoiceId, payment);
+        assertEquals(1, business.invoiceEntries(finance, invoiceId).size());
+        business.credit(finance, invoiceId, Map.of("amount", 24.20, "reason", "Agreed credit", "idempotencyKey", "c1"));
+        Map<String, Object> paid = business.payment(finance, invoiceId,
+                Map.of("amount", 100, "reference", "Bank statement 2", "idempotencyKey", "p2"));
+        assertEquals("PAID", paid.get("status"));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.update(finance, "invoices", invoiceId,
+                Map.of("version", paid.get("version"), "name", "Tampered"))).status());
+        assertEquals("PARTIALLY_PAID",
+                business.refund(finance, invoiceId,
+                        Map.of("amount", 50, "reference", "External refund recorded", "idempotencyKey", "refund"))
+                        .get("status"));
+    }
+
+    @Test
+    void expenseRequiresDistinctManagerAndFinanceThenBudgetCap() {
+        Map<String, Object> budget = create(finance, "budgets",
+                Map.of("name", "Travel", "amount", 50, "startDate", "2020-01-01", "endDate", "2200-01-01"));
+        String id = rid(create(member, "expenses", Map.of("name", "Taxi", "budgetId", rid(budget), "lines",
+                List.of(Map.of("description", "Taxi", "quantity", 1, "unitPrice", 40)))));
+        business.submitExpense(member, id);
+        assertEquals("MANAGER_APPROVED",
+                business.expenseDecision(manager, id, Map.of("decision", "APPROVED")).get("status"));
+        assertEquals("APPROVED", business.expenseDecision(finance, id, Map.of("decision", "APPROVED")).get("status"));
+        String second = rid(create(member, "expenses", Map.of("name", "Taxi2", "budgetId", rid(budget), "lines",
+                List.of(Map.of("description", "Taxi", "quantity", 1, "unitPrice", 40)))));
+        business.submitExpense(member, second);
+        business.expenseDecision(manager, second, Map.of("decision", "APPROVED"));
+        assertEquals(409, assertThrows(ApiException.class,
+                () -> business.expenseDecision(finance, second, Map.of("decision", "APPROVED"))).status());
+        assertEquals(403, assertThrows(ApiException.class,
+                () -> business.expenseDecision(member, second, Map.of("decision", "APPROVED"))).status());
+    }
+
+    @Test
+    void payrollFreezesCalculatedInputsRequiresCheckerAndRestrictsPayslips() {
+        Map<String, Object> employee = workforce.create(admin, "employees",
+                Map.of("name", "Employee", "employeeCode", "E1", "userId", member.userId(), "joinDate", "2027-01-01"));
+        create(payroll, "compensations", Map.of("name", "Monthly salary", "employeeId", rid(employee), "effectiveFrom",
+                "2027-01-01", "baseSalary", 31000, "currency", "INR", "bankAccount", "1234567890"));
+        Map<String, Object> run = create(payroll, "payrollRuns", Map.of("name", "January payroll", "periodStart",
+                "2027-01-01", "periodEnd", "2027-01-31", "currency", "INR"));
+        business.calculate(payroll, rid(run));
+        assertEquals(403, assertThrows(ApiException.class, () -> business.reviewPayroll(payroll, rid(run))).status());
+        business.reviewPayroll(finance, rid(run));
+        Map<String, Object> finalized = business.finalizePayroll(finance, rid(run));
+        assertEquals(0, new BigDecimal("31000.00").compareTo((BigDecimal) finalized.get("total")));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.calculate(payroll, rid(run))).status());
+        assertEquals(1, business.payslips(member).size());
+        String payslipId = business.payslips(member).getFirst().get("id").toString();
+        assertTrue(new String(business.payslipPdf(member, payslipId).getBody(),
+                java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF-1.4"));
+        assertEquals(403, assertThrows(ApiException.class, () -> business.payslipPdf(other, payslipId)).status());
+        assertTrue(business.payslips(other).isEmpty());
+        assertEquals(403, assertThrows(ApiException.class, () -> business.payrollEntries(member, rid(run))).status());
+        assertTrue(business.bankExport(finance, rid(run)).getBody().contains("31000.00"));
+        Map<String, Object> adjustment = business.adjustPayroll(payroll, rid(run),
+                Map.of("employeeId", rid(employee), "amount", -100, "reason", "Recovery correction"));
+        business.reviewPayroll(finance, rid(adjustment));
+        business.finalizePayroll(finance, rid(adjustment));
+        assertEquals(2, business.payslips(member).size());
+        assertEquals(0, new BigDecimal("31000.00")
+                .compareTo((BigDecimal) business.payrollEntries(finance, rid(run)).getFirst().get("net")));
+    }
+
+    @Test
+    void businessRolesAndTenantReferencesAreEnforced() {
+        String tenantB = uuid();
+        db.update(
+                "INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','UTC',UTC_TIMESTAMP(6))",
+                tenantB, "Other", tenantB);
+        String foreignId = uuid();
+        db.update(
+                "INSERT INTO business_entities(id,tenant_id,kind,payload,status,currency,created_by,updated_by) VALUES(?,?,? ,?,'ACTIVE','INR',?,?)",
+                foreignId, tenantB, "accounts", "{\"name\":\"Private\"}", admin.userId(), admin.userId());
+        assertEquals(404, assertThrows(ApiException.class,
+                () -> create(sales, "contacts", Map.of("name", "Contact", "accountId", foreignId))).status());
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> business.records(member, "accounts", "", 0, 100)).status());
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> create(sales, "items", Map.of("name", "Forbidden", "sku", "X")))
+                        .status());
+    }
+
+    @Test
+    void reservationsProtectAvailabilityAndCycleCountsRequireAnotherReviewer() {
+        String item = rid(item()), warehouse = rid(warehouse("Main"));
+        business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type", "RECEIPT", "quantity",
+                5, "unitCost", 10, "reason", "Opening", "idempotencyKey", "open"));
+        Map<String, Object> reservation = create(procurement, "stockReservations",
+                Map.of("name", "Order hold", "itemId", item, "warehouseId", warehouse, "quantity", 4));
+        business.reserve(procurement, rid(reservation));
+        assertEquals(409,
+                assertThrows(ApiException.class,
+                        () -> business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type",
+                                "ISSUE", "quantity", 2, "reason", "Other request", "idempotencyKey", "blocked")))
+                        .status());
+        business.consume(procurement, rid(reservation), Map.of());
+        assertEquals(0, BigDecimal.ONE.compareTo((BigDecimal) business.stock(procurement).getFirst().get("quantity")));
+        Map<String, Object> count = create(procurement, "inventoryCounts", Map.of("name", "Count", "warehouseId",
+                warehouse, "lines", List.of(Map.of("itemId", item, "countedQuantity", 3))));
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> business.approveCount(procurement, rid(count))).status());
+        business.approveCount(admin, rid(count));
+        assertEquals(0,
+                new BigDecimal("3").compareTo((BigDecimal) business.stock(procurement).getFirst().get("quantity")));
+    }
+
+    @Test
+    void fifoAndSerialPostingsPreserveExactValueAndUniqueness() {
+        String item = rid(
+                create(procurement, "items", Map.of("name", "FIFO", "sku", uuid(), "valuationMethod", "FIFO"))),
+                warehouse = rid(warehouse("FIFO store"));
+        business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type", "RECEIPT", "quantity",
+                2, "unitCost", 10, "batch", "LOT-A", "reason", "Opening", "idempotencyKey", "lot-a"));
+        business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type", "RECEIPT", "quantity",
+                2, "unitCost", 20, "batch", "LOT-B", "reason", "Opening", "idempotencyKey", "lot-b"));
+        business.movement(procurement, Map.of("itemId", item, "warehouseId", warehouse, "type", "ISSUE", "quantity", 3,
+                "reason", "FIFO issue", "idempotencyKey", "fifo-out"));
+        assertEquals(0, new BigDecimal("20")
+                .compareTo((BigDecimal) business.stock(procurement).getFirst().get("inventoryValue")));
+        String serialItem = rid(
+                create(procurement, "items", Map.of("name", "Serialized", "sku", uuid(), "serialTracked", true)));
+        Map<String, Object> serialReceipt = Map.of("itemId", serialItem, "warehouseId", warehouse, "type", "RECEIPT",
+                "quantity", 1, "unitCost", 5, "serialNumbers", List.of("SN-1"), "reason", "Receive", "idempotencyKey",
+                "serial");
+        business.movement(procurement, serialReceipt);
+        Map<String, Object> duplicate = new LinkedHashMap<>(serialReceipt);
+        duplicate.put("idempotencyKey", "serial-duplicate");
+        assertEquals(409, assertThrows(ApiException.class, () -> business.movement(procurement, duplicate)).status());
+        assertFalse(((List<?>) business.traceability(procurement).get("serials")).isEmpty());
+    }
+
+    @Test
+    void fiscalCloseAndPurchaseBudgetsRejectFurtherPosting() {
+        String item = rid(item()), supplier = rid(create(procurement, "suppliers", Map.of("name", "Vendor")));
+        Map<String, Object> budget = create(finance, "budgets",
+                Map.of("name", "Cap", "amount", 10, "startDate", "2020-01-01", "endDate", "2200-01-01"));
+        Map<String, Object> po = create(procurement, "purchaseOrders", Map.of("name", "PO", "supplierId", supplier,
+                "budgetId", rid(budget), "lines", List.of(line(item, 2, 10))));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.approveOrder(admin, rid(po))).status());
+        Map<String, Object> period = create(finance, "financialPeriods", Map.of("name", "Current", "startDate",
+                java.time.LocalDate.now().withDayOfMonth(1).toString(), "endDate",
+                java.time.LocalDate.now().withDayOfMonth(java.time.LocalDate.now().lengthOfMonth()).toString()));
+        business.closePeriod(finance, rid(period), Map.of("reason", "Period close"));
+        String account = rid(create(sales, "accounts", Map.of("name", "Customer")));
+        Map<String, Object> invoice = create(finance, "invoices", Map.of("name", "Invoice", "accountId", account,
+                "lines", List.of(Map.of("description", "Service", "quantity", 1, "unitPrice", 10))));
+        assertEquals(409,
+                assertThrows(ApiException.class, () -> business.issueInvoice(finance, rid(invoice))).status());
+        business.reopenPeriod(finance, rid(period), Map.of("reason", "Approved correction"));
+        assertEquals("ISSUED", business.issueInvoice(finance, rid(invoice)).get("status"));
+    }
+
+    @Test
+    void rfqComparisonAwardAndContractPriceAreEnforced() {
+        String item = rid(item()), supplier = rid(create(procurement, "suppliers", Map.of("name", "Vendor")));
+        Map<String, Object> rfq = create(procurement, "rfqs",
+                Map.of("name", "Request", "supplierIds", List.of(supplier), "lines", List.of(line(item, 2, 0))));
+        Map<String, Object> quote = create(procurement, "supplierQuotes", Map.of("name", "Vendor quote", "rfqId",
+                rid(rfq), "supplierId", supplier, "lines", List.of(line(item, 2, 12))));
+        assertEquals(1, business.quoteComparison(procurement, rid(rfq)).size());
+        assertEquals("DRAFT", business.awardQuote(admin, rid(quote)).get("status"));
+        Map<String, Object> contract = create(procurement, "supplierContracts", Map.of("name", "Contract", "supplierId",
+                supplier, "startDate", "2020-01-01", "endDate", "2200-01-01", "lines", List.of(line(item, 1, 10))));
+        assertEquals(409,
+                assertThrows(ApiException.class,
+                        () -> create(procurement, "purchaseOrders", Map.of("name", "Wrong price", "supplierId",
+                                supplier, "contractId", rid(contract), "lines", List.of(line(item, 1, 11)))))
+                        .status());
+    }
+
+    @Test
+    void domainStaffKeepOwnAttendanceLeaveAndProfileWithoutHrAuthority() {
+        for (Principal staff : List.of(sales, procurement, finance, payroll)) {
+            Map<String, Object> employee = workforce.create(admin, "employees",
+                    Map.of("name", staff.role(), "employeeCode", staff.role(), "userId", staff.userId()));
+            Map<String, Object> profile = workforce.update(staff, "employees", rid(employee),
+                    Map.of("version", 1, "phone", "9000000000"));
+            assertEquals("9000000000", profile.get("phone"));
+            assertEquals("CHECKED_IN", workforce.checkIn(staff).get("status"));
+            workforce.checkOut(staff);
+            assertEquals(403, assertThrows(ApiException.class,
+                    () -> workforce.create(staff, "departments", Map.of("name", "Forbidden"))).status());
+        }
+        workforce.create(admin, "leavePolicies", Map.of("name", "Annual", "annualDays", 20));
+        Map<String, Object> request = workforce.requestLeave(sales,
+                Map.of("type", "Annual", "startDate", "2027-01-04", "endDate", "2027-01-04", "reason", "Personal"));
+        assertEquals("PENDING", request.get("status"));
+    }
+
+    @Test
+    void crmForecastLostReasonAndOwnerIsolationAreEnforced() {
+        String stage = rid(
+                create(sales, "pipelineStages", Map.of("name", "Qualified", "probability", 25, "outcome", "OPEN"))),
+                lost = rid(
+                        create(sales, "pipelineStages", Map.of("name", "Lost", "probability", 0, "outcome", "LOST")));
+        Map<String, Object> deal = create(sales, "opportunities",
+                Map.of("name", "Deal", "stageId", stage, "amount", 1000, "expectedCloseDate", "2027-01-15"));
+        Collection<?> forecast = (Collection<?>) business.crmSummary(sales).get("forecasts");
+        assertEquals(1, forecast.size());
+        Map<?, ?> row = (Map<?, ?>) forecast.iterator().next();
+        assertEquals(0, new BigDecimal("250").compareTo((BigDecimal) row.get("weightedAmount")));
+        Principal unrelated = user("SALES");
+        assertTrue(business.records(unrelated, "opportunities", "", 0, 100).isEmpty());
+        assertEquals(403, assertThrows(ApiException.class,
+                () -> business.opportunityStage(unrelated, rid(deal), Map.of("stageId", lost, "reason", "Private")))
+                .status());
+        assertEquals(400, assertThrows(ApiException.class,
+                () -> business.opportunityStage(sales, rid(deal), Map.of("stageId", lost))).status());
+        business.opportunityStage(sales, rid(deal), Map.of("stageId", lost, "reason", "Budget"));
+        assertEquals(1, ((Map<?, ?>) business.crmSummary(sales).get("lostReasons")).get("Budget"));
+    }
+
+    @Test
+    void overdueReminderIsQueuedOncePerDayAndContractRenewalPreservesOriginal() {
+        String account = rid(create(sales, "accounts", Map.of("name", "Customer", "email", "customer@test.invalid")));
+        Map<String, Object> invoice = create(finance, "invoices",
+                Map.of("name", "Overdue", "accountId", account, "dueDate",
+                        java.time.LocalDate.now().minusDays(1).toString(), "lines",
+                        List.of(Map.of("description", "Service", "quantity", 1, "unitPrice", 10))));
+        business.issueInvoice(finance, rid(invoice));
+        assertEquals(1, business.invoiceReminders(finance).get("queued"));
+        assertEquals(0, business.invoiceReminders(finance).get("queued"));
+        assertEquals(1, business.reminderHistory(finance, rid(invoice)).size());
+        Map<String, Object> contract = create(sales, "customerContracts",
+                Map.of("name", "Support", "accountId", account, "startDate", "2027-01-01", "endDate", "2027-12-31"));
+        Map<String, Object> next = business.renewContract(sales, rid(contract),
+                Map.of("startDate", "2028-01-01", "endDate", "2028-12-31"));
+        assertEquals(rid(contract), next.get("renewalOf"));
+        assertEquals("ACTIVE", next.get("status"));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.renewContract(sales, rid(contract),
+                Map.of("startDate", "2029-01-01", "endDate", "2029-12-31"))).status());
+    }
+
+    @Test
+    void requiredInvoiceReviewCannotBeForgedAndUnissuedReviewsDoNotConsumeNumbers() {
+        String account = rid(create(sales, "accounts", Map.of("name", "Customer")));
+        Map<String, Object> body = Map.of("name", "Controlled invoice", "accountId", account, "requireReview", true,
+                "invoiceNumber", "INV-TAMPER", "status", "REVIEWED", "reviewedBy", admin.userId(), "lines",
+                List.of(Map.of("description", "Service", "quantity", 1, "unitPrice", 10)));
+        Map<String, Object> first = create(finance, "invoices", body), second = create(finance, "invoices", body);
+        assertEquals("DRAFT", first.get("status"));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.issueInvoice(finance, rid(first))).status());
+        assertEquals(403, assertThrows(ApiException.class, () -> business.reviewInvoice(finance, rid(first))).status());
+        business.reviewInvoice(admin, rid(first));
+        business.reviewInvoice(admin, rid(second));
+        Map<String, Object> issuedFirst = business.issueInvoice(finance, rid(first)),
+                issuedSecond = business.issueInvoice(finance, rid(second));
+        assertTrue(issuedFirst.get("invoiceNumber").toString().endsWith("000001"));
+        assertTrue(issuedSecond.get("invoiceNumber").toString().endsWith("000002"));
+        assertNotEquals("INV-TAMPER", issuedFirst.get("invoiceNumber"));
+        assertEquals(409, assertThrows(ApiException.class, () -> business.update(finance, "invoices", rid(first),
+                Map.of("version", issuedFirst.get("version"), "invoiceNumber", "FORGED"))).status());
+    }
 }

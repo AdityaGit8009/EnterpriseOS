@@ -6,33 +6,374 @@ import java.util.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-@RestController @RequestMapping("/api/v1")
+@RestController
+@RequestMapping("/api/v1")
 public class PlatformController {
-    private static final Set<String> KINDS=Set.of("incidents","backupRecords","releases","uatCases","defects","changeRequests","handover","dataRequests","securityReviews","retentionPolicies","billingDocuments");
+    private static final Set<String> KINDS = Set.of("incidents", "backupRecords", "releases", "uatCases", "defects",
+            "changeRequests", "handover", "dataRequests", "securityReviews", "retentionPolicies", "billingDocuments");
     private final AutomationSupport s;
-    public PlatformController(AutomationSupport s){this.s=s;}
-    @GetMapping("/platform/plans") public List<Map<String,Object>> plans(@RequestAttribute Principal principal){platform(principal);return s.db.queryForList("SELECT id,name,seat_limit AS seatLimit,record_limit AS recordLimit,modules,created_at AS createdAt FROM subscription_plans ORDER BY created_at DESC").stream().map(row->{row.put("modules",moduleList(row.get("modules")));return row;}).toList();}
-    @PostMapping("/platform/plans") @Transactional public Map<String,Object> plan(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){platform(principal);String id=s.id(),name=Inputs.text(body,"name",180);int seats=s.integer(body,"seatLimit",-1,1,100000),records=s.integer(body,"recordLimit",-1,1,10000000);Object raw=body.get("modules");if(!(raw instanceof List<?> list)||list.isEmpty()||list.stream().anyMatch(v->!(v instanceof String value)||(!EntitlementService.MODULES.contains(value)&&!value.equals("*"))))throw new ApiException(400,"Choose supported subscription modules.");s.db.update("INSERT INTO subscription_plans(id,name,seat_limit,record_limit,modules) VALUES (?,?,?,?,?)",id,name,seats,records,s.encode(list));s.audit.log(principal,"SUBSCRIPTION_PLAN_CREATED","subscriptionPlan",id);return Map.of("id",id,"name",name,"seatLimit",seats,"recordLimit",records,"modules",list);}
-    @GetMapping("/platform/subscriptions") public List<Map<String,Object>> subscriptions(@RequestAttribute Principal principal){platform(principal);return s.db.queryForList("SELECT s.*,t.name AS tenant_name,p.name AS plan_name,p.seat_limit,p.record_limit,p.modules,CASE WHEN s.status IN ('ACTIVE','TRIAL') AND (s.expires_at>UTC_TIMESTAMP(6) OR s.grace_until>UTC_TIMESTAMP(6)) THEN 1 ELSE 0 END AS writable FROM tenant_subscriptions s JOIN tenants t ON t.id=s.tenant_id JOIN subscription_plans p ON p.id=s.plan_id ORDER BY s.created_at DESC").stream().map(this::subscriptionView).toList();}
-    @PostMapping("/platform/subscriptions") @Transactional public Map<String,Object> subscribe(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){platform(principal);String tenant=Inputs.text(body,"tenantId",36);if(s.db.queryForList("SELECT id FROM tenants WHERE id=? FOR UPDATE",tenant).isEmpty())throw new ApiException(404,"Tenant not found.");if(!s.entitlements.subscription(tenant).isEmpty())throw new ApiException(409,"Tenant already has a subscription. Update it instead.");return saveSubscription(principal,null,tenant,body);}
-    @PatchMapping("/platform/subscriptions/{id}") @Transactional public Map<String,Object> change(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){platform(principal);var existing=s.first(s.db.queryForList("SELECT * FROM tenant_subscriptions WHERE id=?",id),"Subscription");String tenant=existing.get("tenant_id").toString();s.db.queryForObject("SELECT id FROM tenants WHERE id=? FOR UPDATE",String.class,tenant);existing=s.first(s.db.queryForList("SELECT * FROM tenant_subscriptions WHERE id=? FOR UPDATE",id),"Subscription");if(s.integer(body,"version",-1,1,Integer.MAX_VALUE)!=((Number)existing.get("version")).intValue())throw new ApiException(409,"Subscription changed. Reload before updating.");return saveSubscription(principal,existing,tenant,body);}
-    @GetMapping("/org/subscription") public Map<String,Object> ownSubscription(@RequestAttribute Principal principal){s.org(principal);var sub=s.entitlements.subscription(principal.tenantId());if(sub.isEmpty())return Map.of("status","UNASSIGNED","access","UNRESTRICTED","message","No subscription plan has been assigned by the platform administrator.");return subscriptionView(sub);}
-    @GetMapping("/org/usage") public Map<String,Object> usage(@RequestAttribute Principal principal){s.org(principal);var result=new LinkedHashMap<String,Object>();result.put("activeUsers",s.entitlements.seatCount(principal.tenantId()));result.put("pendingInvites",s.db.queryForObject("SELECT COUNT(*) FROM invitations WHERE tenant_id=? AND accepted_at IS NULL AND expires_at>UTC_TIMESTAMP(6)",Long.class,principal.tenantId()));result.put("records",s.entitlements.recordCount(principal.tenantId()));result.put("documentBytes",s.db.queryForObject("SELECT COALESCE(SUM(v.byte_size),0) FROM document_versions v JOIN documents d ON d.id=v.document_id WHERE v.tenant_id=? AND d.status<>'DELETED'",Long.class,principal.tenantId()));result.put("subscription",ownSubscription(principal));return result;}
-    @GetMapping("/org/subscription/history") public List<Map<String,Object>> ownHistory(@RequestAttribute Principal principal){s.allow(principal,"ADMIN","AUDITOR");return s.db.queryForList("SELECT before_state AS beforeState,after_state AS afterState,created_at AS createdAt FROM subscription_events WHERE tenant_id=? ORDER BY created_at DESC",principal.tenantId()).stream().map(row->{row.put("beforeState",s.decode(row.get("beforeState")));row.put("afterState",s.decode(row.get("afterState")));return row;}).toList();}
-    @GetMapping("/platform/operations") public Map<String,Object> operations(@RequestAttribute Principal principal){platform(principal);Map<String,Object> counts=new LinkedHashMap<>();Map<String,String> queries=Map.of("activeSessions","SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6)","pendingMail","SELECT COUNT(*) FROM mail_queue WHERE status='PENDING'","failedMail","SELECT COUNT(*) FROM mail_queue WHERE status='FAILED'","pendingWebhooks","SELECT COUNT(*) FROM webhook_deliveries WHERE status='PENDING'","failedWebhooks","SELECT COUNT(*) FROM webhook_deliveries WHERE status='FAILED'","overdueWorkflows","SELECT COUNT(*) FROM workflow_instances WHERE state='PENDING' AND due_at<UTC_TIMESTAMP(6)","quarantinedDocuments","SELECT COUNT(*) FROM document_versions WHERE scan_status<>'CLEAN'","expiredSubscriptions","SELECT COUNT(*) FROM tenant_subscriptions WHERE expires_at<=UTC_TIMESTAMP(6) AND (grace_until IS NULL OR grace_until<=UTC_TIMESTAMP(6))","openIncidents","SELECT COUNT(*) FROM platform_records WHERE kind='incidents' AND status<>'RESOLVED'");queries.forEach((key,sql)->counts.put(key,s.db.queryForObject(sql,Long.class)));return Map.of("observedAt",Instant.now().toString(),"counts",counts,"mail",s.db.queryForList("SELECT id,recipient,subject,status,attempts,next_attempt_at AS nextAttemptAt,created_at AS createdAt FROM mail_queue ORDER BY created_at DESC LIMIT 50"),"note","Operational counts are live database observations. Backup, UAT and release evidence is recorded separately and is not an automatic certification.");}
-    @PostMapping("/platform/mail/{id}/retry") @Transactional public Map<String,Object> retryMail(@RequestAttribute Principal principal,@PathVariable String id){platform(principal);if(s.db.update("UPDATE mail_queue SET status='PENDING',attempts=0,next_attempt_at=UTC_TIMESTAMP(6) WHERE id=? AND status='FAILED' AND body<>''",id)==0)throw new ApiException(409,"Only failed retained messages can be retried.");s.audit.log(principal,"MAIL_RETRY_REQUESTED","mailJob",id);return Map.of("id",id,"status","PENDING");}
-    @GetMapping("/platform/audit/security-events") public List<Map<String,Object>> securityEvents(@RequestAttribute Principal principal){platform(principal);return s.db.queryForList("SELECT id,tenant_id AS tenantId,actor_name AS actorName,action,entity,created_at AS createdAt FROM audit_events WHERE action LIKE 'AUTH_%' OR action LIKE '%PASSWORD%' OR action LIKE '%ROLE%' OR action LIKE '%SUSPEND%' OR action LIKE '%MFA%' ORDER BY created_at DESC LIMIT 500");}
-    @GetMapping("/platform/records/{kind}") public List<Map<String,Object>> records(@RequestAttribute Principal principal,@PathVariable String kind){platform(principal);kind(kind);return s.db.queryForList("SELECT * FROM platform_records WHERE kind=? ORDER BY created_at DESC LIMIT 500",kind).stream().map(this::recordView).toList();}
-    @PostMapping("/platform/records/{kind}") @Transactional public Map<String,Object> createRecord(@RequestAttribute Principal principal,@PathVariable String kind,@RequestBody Map<String,Object> body){return saveRecord(principal,kind,null,body);}
-    @PutMapping("/platform/records/{kind}/{id}") @Transactional public Map<String,Object> updateRecord(@RequestAttribute Principal principal,@PathVariable String kind,@PathVariable String id,@RequestBody Map<String,Object> body){return saveRecord(principal,kind,id,body);}
-    @GetMapping("/platform/release-status") public Map<String,Object> releaseStatus(@RequestAttribute Principal principal){platform(principal);long defects=s.db.queryForObject("SELECT COUNT(*) FROM platform_records WHERE kind='defects' AND status NOT IN ('CLOSED','ACCEPTED') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.severity')) IN ('HIGH','CRITICAL')",Long.class);long failed=s.db.queryForObject("SELECT COUNT(*) FROM platform_records WHERE kind='uatCases' AND status='FAILED'",Long.class);return Map.of("openCriticalOrHighDefects",defects,"failedUatCases",failed,"releaseGate",defects+failed==0?"NO_RECORDED_BLOCKERS":"BLOCKED","note","This gate checks recorded defects and UAT outcomes. Client sign-off, restore evidence, security review and deployment approval must still be supplied.");}
-    private Map<String,Object> saveSubscription(Principal p,Map<String,Object> previous,String tenant,Map<String,Object> body){String planId=Inputs.text(body,"planId",36);if(s.db.queryForList("SELECT id FROM subscription_plans WHERE id=?",planId).isEmpty())throw new ApiException(404,"Subscription plan not found.");String status=Inputs.text(body,"status",20);if(!Set.of("ACTIVE","TRIAL","SUSPENDED","CANCELLED").contains(status))throw new ApiException(400,"Subscription status must be ACTIVE, TRIAL, SUSPENDED or CANCELLED.");Timestamp expires=timestamp(Inputs.text(body,"expiresAt",40));String grace=Inputs.optional(body,"graceUntil",40,"");Timestamp graceUntil=grace.isBlank()?null:timestamp(grace);if(graceUntil!=null&&graceUntil.before(expires))throw new ApiException(400,"Grace period must follow subscription expiry.");String email=Inputs.optional(body,"billingContact",254,"");if(!email.isBlank())Inputs.email(Map.of("email",email),"email");String id=previous==null?s.id():previous.get("id").toString();if(previous==null)s.db.update("INSERT INTO tenant_subscriptions(id,tenant_id,plan_id,status,expires_at,grace_until,billing_contact) VALUES (?,?,?,?,?,?,?)",id,tenant,planId,status,expires,graceUntil,email);else s.db.update("UPDATE tenant_subscriptions SET plan_id=?,status=?,expires_at=?,grace_until=?,billing_contact=?,version=version+1 WHERE id=?",planId,status,expires,graceUntil,email,id);var after=s.entitlements.subscription(tenant);s.db.update("INSERT INTO subscription_events(id,tenant_id,subscription_id,actor_id,before_state,after_state) VALUES (?,?,?,?,?,?)",s.id(),tenant,id,p.userId(),s.encode(previous==null?Map.of():previous),s.encode(after));s.audit.log(p,"SUBSCRIPTION_CHANGED","subscription",id);return subscriptionView(after);}
-    private Map<String,Object> subscriptionView(Map<String,Object> row){var result=new LinkedHashMap<String,Object>();result.put("id",row.get("id"));result.put("tenantId",row.get("tenant_id"));result.put("tenantName",row.get("tenant_name"));result.put("planId",row.get("plan_id"));result.put("planName",row.get("plan_name"));result.put("status",row.get("status"));result.put("expiresAt",row.get("expires_at"));result.put("graceUntil",row.get("grace_until"));result.put("seatLimit",row.get("seat_limit"));result.put("recordLimit",row.get("record_limit"));result.put("modules",moduleList(row.get("modules")));result.put("version",row.get("version"));result.put("billingContact",row.get("billing_contact"));result.put("access",((Number)row.get("writable")).intValue()==1?"READ_WRITE":"READ_ONLY");result.put("overSeatLimit",s.entitlements.seatCount(row.get("tenant_id").toString())>((Number)row.get("seat_limit")).longValue());return result;}
-    private List<?> moduleList(Object raw){try{return s.json.readValue(raw.toString(),List.class);}catch(Exception ex){throw new IllegalStateException(ex);}}
-    private Map<String,Object> saveRecord(Principal p,String kind,String id,Map<String,Object> body){platform(p);kind(kind);var value=new LinkedHashMap<>(body);value.remove("id");value.remove("version");Inputs.text(value,"title",180);String status=Inputs.optional(value,"status",30,"OPEN");value.put("status",status);if(s.encode(value).length()>30000)throw new ApiException(400,"Operational record is too large.");validateRecord(kind,value,status);if(id==null){id=s.id();s.db.update("INSERT INTO platform_records(id,kind,payload,status,actor_id) VALUES (?,?,?,?,?)",id,kind,s.encode(value),status,p.userId());}else{var old=s.first(s.db.queryForList("SELECT * FROM platform_records WHERE kind=? AND id=? FOR UPDATE",kind,id),"Operational record");if(s.integer(body,"version",-1,1,Integer.MAX_VALUE)!=((Number)old.get("version")).intValue())throw new ApiException(409,"Operational record changed. Reload before editing.");s.db.update("UPDATE platform_records SET payload=?,status=?,version=version+1,updated_at=UTC_TIMESTAMP(6) WHERE kind=? AND id=?",s.encode(value),status,kind,id);}s.audit.log(p,"PLATFORM_RECORD_SAVED",kind,id);return recordView(s.db.queryForMap("SELECT * FROM platform_records WHERE id=?",id));}
-    private void validateRecord(String kind,Map<String,Object> body,String status){if(!Set.of("OPEN","IN_PROGRESS","RESOLVED","RECORDED","VERIFIED","FAILED","DRAFT","IN_REVIEW","APPROVED","RELEASED","ROLLED_BACK","PENDING","PASSED","CLOSED","ACCEPTED","REQUESTED","REVIEWED","FULFILLED","REJECTED","ACTIVE","INACTIVE","ISSUED","PAID","VOID").contains(status))throw new ApiException(400,"Unsupported operational record status.");if(kind.equals("incidents")){String severity=Inputs.text(body,"severity",10);if(!Set.of("SEV1","SEV2","SEV3","SEV4").contains(severity))throw new ApiException(400,"Incident severity must be SEV1–SEV4.");if(status.equals("RESOLVED")){Inputs.text(body,"cause",1000);Inputs.text(body,"remediation",2000);}}if(kind.equals("defects")||kind.equals("securityReviews")){if(!Set.of("CRITICAL","HIGH","MEDIUM","LOW").contains(Inputs.text(body,"severity",10)))throw new ApiException(400,"Choose CRITICAL, HIGH, MEDIUM or LOW severity.");}if(kind.equals("backupRecords")&&status.equals("VERIFIED")){if(!Inputs.text(body,"artifactSha256",64).matches("[0-9a-fA-F]{64}"))throw new ApiException(400,"Supply the encrypted backup artifact SHA-256.");Inputs.text(body,"restoreEvidence",2000);s.integer(body,"rpoMinutes",-1,0,10000000);s.integer(body,"rtoMinutes",-1,0,10000000);}if(kind.equals("uatCases")&&status.equals("PASSED")){Inputs.text(body,"expectedResult",2000);Inputs.text(body,"actualResult",2000);Inputs.text(body,"evidence",2000);}if(kind.equals("releases")&&Set.of("APPROVED","RELEASED").contains(status)){Inputs.text(body,"evidence",2000);Inputs.text(body,"approvedBy",180);long blockers=s.db.queryForObject("SELECT COUNT(*) FROM platform_records WHERE (kind='defects' AND status NOT IN ('CLOSED','ACCEPTED') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.severity')) IN ('HIGH','CRITICAL')) OR (kind='uatCases' AND status='FAILED')",Long.class);if(blockers>0)throw new ApiException(409,"Recorded high-severity defects or failed UAT cases block release approval.");}if(kind.equals("retentionPolicies")){s.integer(body,"retentionDays",-1,0,36500);Inputs.text(body,"category",80);Inputs.text(body,"legalBasis",1000);}if(kind.equals("dataRequests")){if(!Set.of("EXPORT","DELETE").contains(Inputs.text(body,"requestType",20)))throw new ApiException(400,"Data request type must be EXPORT or DELETE.");String tenant=Inputs.text(body,"tenantId",36);if(s.db.queryForObject("SELECT COUNT(*) FROM tenants WHERE id=?",Integer.class,tenant)!=1)throw new ApiException(404,"Requested tenant not found.");if(status.equals("FULFILLED"))Inputs.text(body,"evidence",2000);}if(kind.equals("billingDocuments")){if(s.decimal(body,"amount",java.math.BigDecimal.valueOf(-1)).signum()<0)throw new ApiException(400,"Billing amount cannot be negative.");if(!Inputs.text(body,"currency",3).matches("[A-Z]{3}"))throw new ApiException(400,"Currency must be a three-letter ISO code.");}}
-    private Map<String,Object> recordView(Map<String,Object> row){var value=s.decode(row.get("payload"));value.put("id",row.get("id"));value.put("version",row.get("version"));value.put("status",row.get("status"));value.put("createdAt",row.get("created_at"));value.put("updatedAt",row.get("updated_at"));return value;}
-    private void platform(Principal p){Inputs.requireRole(p,"PLATFORM_ADMIN");}
-    private void kind(String kind){if(!KINDS.contains(kind))throw new ApiException(404,"Unknown platform record collection.");}
-    private Timestamp timestamp(String value){try{return Timestamp.from(value.length()==10?LocalDate.parse(value).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant():Instant.parse(value));}catch(Exception ex){throw new ApiException(400,"Use an ISO date or UTC timestamp for expiry.");}}
+
+    public PlatformController(AutomationSupport s) {
+        this.s = s;
+    }
+
+    @GetMapping("/platform/plans")
+    public List<Map<String, Object>> plans(@RequestAttribute Principal principal) {
+        platform(principal);
+        return s.db.queryForList(
+                "SELECT id,name,seat_limit AS seatLimit,record_limit AS recordLimit,modules,created_at AS createdAt FROM subscription_plans ORDER BY created_at DESC")
+                .stream().map(row -> {
+                    row.put("modules", moduleList(row.get("modules")));
+                    return row;
+                }).toList();
+    }
+
+    @PostMapping("/platform/plans")
+    @Transactional
+    public Map<String, Object> plan(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        platform(principal);
+        String id = s.id(), name = Inputs.text(body, "name", 180);
+        int seats = s.integer(body, "seatLimit", -1, 1, 100000),
+                records = s.integer(body, "recordLimit", -1, 1, 10000000);
+        Object raw = body.get("modules");
+        if (!(raw instanceof List<?> list) || list.isEmpty() || list.stream().anyMatch(v -> !(v instanceof String value)
+                || (!EntitlementService.MODULES.contains(value) && !value.equals("*"))))
+            throw new ApiException(400, "Choose supported subscription modules.");
+        s.db.update("INSERT INTO subscription_plans(id,name,seat_limit,record_limit,modules) VALUES (?,?,?,?,?)", id,
+                name, seats, records, s.encode(list));
+        s.audit.log(principal, "SUBSCRIPTION_PLAN_CREATED", "subscriptionPlan", id);
+        return Map.of("id", id, "name", name, "seatLimit", seats, "recordLimit", records, "modules", list);
+    }
+
+    @GetMapping("/platform/subscriptions")
+    public List<Map<String, Object>> subscriptions(@RequestAttribute Principal principal) {
+        platform(principal);
+        return s.db.queryForList(
+                "SELECT s.*,t.name AS tenant_name,p.name AS plan_name,p.seat_limit,p.record_limit,p.modules,CASE WHEN s.status IN ('ACTIVE','TRIAL') AND (s.expires_at>UTC_TIMESTAMP(6) OR s.grace_until>UTC_TIMESTAMP(6)) THEN 1 ELSE 0 END AS writable FROM tenant_subscriptions s JOIN tenants t ON t.id=s.tenant_id JOIN subscription_plans p ON p.id=s.plan_id ORDER BY s.created_at DESC")
+                .stream().map(this::subscriptionView).toList();
+    }
+
+    @PostMapping("/platform/subscriptions")
+    @Transactional
+    public Map<String, Object> subscribe(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        platform(principal);
+        String tenant = Inputs.text(body, "tenantId", 36);
+        if (s.db.queryForList("SELECT id FROM tenants WHERE id=? FOR UPDATE", tenant).isEmpty())
+            throw new ApiException(404, "Tenant not found.");
+        if (!s.entitlements.subscription(tenant).isEmpty())
+            throw new ApiException(409, "Tenant already has a subscription. Update it instead.");
+        return saveSubscription(principal, null, tenant, body);
+    }
+
+    @PatchMapping("/platform/subscriptions/{id}")
+    @Transactional
+    public Map<String, Object> change(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        platform(principal);
+        var existing = s.first(s.db.queryForList("SELECT * FROM tenant_subscriptions WHERE id=?", id), "Subscription");
+        String tenant = existing.get("tenant_id").toString();
+        s.db.queryForObject("SELECT id FROM tenants WHERE id=? FOR UPDATE", String.class, tenant);
+        existing = s.first(s.db.queryForList("SELECT * FROM tenant_subscriptions WHERE id=? FOR UPDATE", id),
+                "Subscription");
+        if (s.integer(body, "version", -1, 1, Integer.MAX_VALUE) != ((Number) existing.get("version")).intValue())
+            throw new ApiException(409, "Subscription changed. Reload before updating.");
+        return saveSubscription(principal, existing, tenant, body);
+    }
+
+    @GetMapping("/org/subscription")
+    public Map<String, Object> ownSubscription(@RequestAttribute Principal principal) {
+        s.org(principal);
+        var sub = s.entitlements.subscription(principal.tenantId());
+        if (sub.isEmpty())
+            return Map.of("status", "UNASSIGNED", "access", "UNRESTRICTED", "message",
+                    "No subscription plan has been assigned by the platform administrator.");
+        return subscriptionView(sub);
+    }
+
+    @GetMapping("/org/usage")
+    public Map<String, Object> usage(@RequestAttribute Principal principal) {
+        s.org(principal);
+        var result = new LinkedHashMap<String, Object>();
+        result.put("activeUsers", s.entitlements.seatCount(principal.tenantId()));
+        result.put("pendingInvites", s.db.queryForObject(
+                "SELECT COUNT(*) FROM invitations WHERE tenant_id=? AND accepted_at IS NULL AND expires_at>UTC_TIMESTAMP(6)",
+                Long.class, principal.tenantId()));
+        result.put("records", s.entitlements.recordCount(principal.tenantId()));
+        result.put("documentBytes", s.db.queryForObject(
+                "SELECT COALESCE(SUM(v.byte_size),0) FROM document_versions v JOIN documents d ON d.id=v.document_id WHERE v.tenant_id=? AND d.status<>'DELETED'",
+                Long.class, principal.tenantId()));
+        result.put("subscription", ownSubscription(principal));
+        return result;
+    }
+
+    @GetMapping("/org/subscription/history")
+    public List<Map<String, Object>> ownHistory(@RequestAttribute Principal principal) {
+        s.allow(principal, "ADMIN", "AUDITOR");
+        return s.db.queryForList(
+                "SELECT before_state AS beforeState,after_state AS afterState,created_at AS createdAt FROM subscription_events WHERE tenant_id=? ORDER BY created_at DESC",
+                principal.tenantId()).stream().map(row -> {
+                    row.put("beforeState", s.decode(row.get("beforeState")));
+                    row.put("afterState", s.decode(row.get("afterState")));
+                    return row;
+                }).toList();
+    }
+
+    @GetMapping("/platform/operations")
+    public Map<String, Object> operations(@RequestAttribute Principal principal) {
+        platform(principal);
+        Map<String, Object> counts = new LinkedHashMap<>();
+        Map<String, String> queries = Map.of("activeSessions",
+                "SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL AND expires_at>UTC_TIMESTAMP(6)", "pendingMail",
+                "SELECT COUNT(*) FROM mail_queue WHERE status='PENDING'", "failedMail",
+                "SELECT COUNT(*) FROM mail_queue WHERE status='FAILED'", "pendingWebhooks",
+                "SELECT COUNT(*) FROM webhook_deliveries WHERE status='PENDING'", "failedWebhooks",
+                "SELECT COUNT(*) FROM webhook_deliveries WHERE status='FAILED'", "overdueWorkflows",
+                "SELECT COUNT(*) FROM workflow_instances WHERE state='PENDING' AND due_at<UTC_TIMESTAMP(6)",
+                "quarantinedDocuments", "SELECT COUNT(*) FROM document_versions WHERE scan_status<>'CLEAN'",
+                "expiredSubscriptions",
+                "SELECT COUNT(*) FROM tenant_subscriptions WHERE expires_at<=UTC_TIMESTAMP(6) AND (grace_until IS NULL OR grace_until<=UTC_TIMESTAMP(6))",
+                "openIncidents", "SELECT COUNT(*) FROM platform_records WHERE kind='incidents' AND status<>'RESOLVED'");
+        queries.forEach((key, sql) -> counts.put(key, s.db.queryForObject(sql, Long.class)));
+        return Map.of("observedAt", Instant.now().toString(), "counts", counts, "mail", s.db.queryForList(
+                "SELECT id,recipient,subject,status,attempts,next_attempt_at AS nextAttemptAt,created_at AS createdAt FROM mail_queue ORDER BY created_at DESC LIMIT 50"),
+                "note",
+                "Operational counts are live database observations. Backup, UAT and release evidence is recorded separately and is not an automatic certification.");
+    }
+
+    @PostMapping("/platform/mail/{id}/retry")
+    @Transactional
+    public Map<String, Object> retryMail(@RequestAttribute Principal principal, @PathVariable String id) {
+        platform(principal);
+        if (s.db.update(
+                "UPDATE mail_queue SET status='PENDING',attempts=0,next_attempt_at=UTC_TIMESTAMP(6) WHERE id=? AND status='FAILED' AND body<>''",
+                id) == 0)
+            throw new ApiException(409, "Only failed retained messages can be retried.");
+        s.audit.log(principal, "MAIL_RETRY_REQUESTED", "mailJob", id);
+        return Map.of("id", id, "status", "PENDING");
+    }
+
+    @GetMapping("/platform/audit/security-events")
+    public List<Map<String, Object>> securityEvents(@RequestAttribute Principal principal) {
+        platform(principal);
+        return s.db.queryForList(
+                "SELECT id,tenant_id AS tenantId,actor_name AS actorName,action,entity,created_at AS createdAt FROM audit_events WHERE action LIKE 'AUTH_%' OR action LIKE '%PASSWORD%' OR action LIKE '%ROLE%' OR action LIKE '%SUSPEND%' OR action LIKE '%MFA%' ORDER BY created_at DESC LIMIT 500");
+    }
+
+    @GetMapping("/platform/records/{kind}")
+    public List<Map<String, Object>> records(@RequestAttribute Principal principal, @PathVariable String kind) {
+        platform(principal);
+        kind(kind);
+        return s.db.queryForList("SELECT * FROM platform_records WHERE kind=? ORDER BY created_at DESC LIMIT 500", kind)
+                .stream().map(this::recordView).toList();
+    }
+
+    @PostMapping("/platform/records/{kind}")
+    @Transactional
+    public Map<String, Object> createRecord(@RequestAttribute Principal principal, @PathVariable String kind,
+            @RequestBody Map<String, Object> body) {
+        return saveRecord(principal, kind, null, body);
+    }
+
+    @PutMapping("/platform/records/{kind}/{id}")
+    @Transactional
+    public Map<String, Object> updateRecord(@RequestAttribute Principal principal, @PathVariable String kind,
+            @PathVariable String id, @RequestBody Map<String, Object> body) {
+        return saveRecord(principal, kind, id, body);
+    }
+
+    @GetMapping("/platform/release-status")
+    public Map<String, Object> releaseStatus(@RequestAttribute Principal principal) {
+        platform(principal);
+        long defects = s.db.queryForObject(
+                "SELECT COUNT(*) FROM platform_records WHERE kind='defects' AND status NOT IN ('CLOSED','ACCEPTED') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.severity')) IN ('HIGH','CRITICAL')",
+                Long.class);
+        long failed = s.db.queryForObject(
+                "SELECT COUNT(*) FROM platform_records WHERE kind='uatCases' AND status='FAILED'", Long.class);
+        return Map.of("openCriticalOrHighDefects", defects, "failedUatCases", failed, "releaseGate",
+                defects + failed == 0 ? "NO_RECORDED_BLOCKERS" : "BLOCKED", "note",
+                "This gate checks recorded defects and UAT outcomes. Client sign-off, restore evidence, security review and deployment approval must still be supplied.");
+    }
+
+    private Map<String, Object> saveSubscription(Principal p, Map<String, Object> previous, String tenant,
+            Map<String, Object> body) {
+        String planId = Inputs.text(body, "planId", 36);
+        if (s.db.queryForList("SELECT id FROM subscription_plans WHERE id=?", planId).isEmpty())
+            throw new ApiException(404, "Subscription plan not found.");
+        String status = Inputs.text(body, "status", 20);
+        if (!Set.of("ACTIVE", "TRIAL", "SUSPENDED", "CANCELLED").contains(status))
+            throw new ApiException(400, "Subscription status must be ACTIVE, TRIAL, SUSPENDED or CANCELLED.");
+        Timestamp expires = timestamp(Inputs.text(body, "expiresAt", 40));
+        String grace = Inputs.optional(body, "graceUntil", 40, "");
+        Timestamp graceUntil = grace.isBlank() ? null : timestamp(grace);
+        if (graceUntil != null && graceUntil.before(expires))
+            throw new ApiException(400, "Grace period must follow subscription expiry.");
+        String email = Inputs.optional(body, "billingContact", 254, "");
+        if (!email.isBlank())
+            Inputs.email(Map.of("email", email), "email");
+        String id = previous == null ? s.id() : previous.get("id").toString();
+        if (previous == null)
+            s.db.update(
+                    "INSERT INTO tenant_subscriptions(id,tenant_id,plan_id,status,expires_at,grace_until,billing_contact) VALUES (?,?,?,?,?,?,?)",
+                    id, tenant, planId, status, expires, graceUntil, email);
+        else
+            s.db.update(
+                    "UPDATE tenant_subscriptions SET plan_id=?,status=?,expires_at=?,grace_until=?,billing_contact=?,version=version+1 WHERE id=?",
+                    planId, status, expires, graceUntil, email, id);
+        var after = s.entitlements.subscription(tenant);
+        s.db.update(
+                "INSERT INTO subscription_events(id,tenant_id,subscription_id,actor_id,before_state,after_state) VALUES (?,?,?,?,?,?)",
+                s.id(), tenant, id, p.userId(), s.encode(previous == null ? Map.of() : previous), s.encode(after));
+        s.audit.log(p, "SUBSCRIPTION_CHANGED", "subscription", id);
+        return subscriptionView(after);
+    }
+
+    private Map<String, Object> subscriptionView(Map<String, Object> row) {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("id", row.get("id"));
+        result.put("tenantId", row.get("tenant_id"));
+        result.put("tenantName", row.get("tenant_name"));
+        result.put("planId", row.get("plan_id"));
+        result.put("planName", row.get("plan_name"));
+        result.put("status", row.get("status"));
+        result.put("expiresAt", row.get("expires_at"));
+        result.put("graceUntil", row.get("grace_until"));
+        result.put("seatLimit", row.get("seat_limit"));
+        result.put("recordLimit", row.get("record_limit"));
+        result.put("modules", moduleList(row.get("modules")));
+        result.put("version", row.get("version"));
+        result.put("billingContact", row.get("billing_contact"));
+        result.put("access", ((Number) row.get("writable")).intValue() == 1 ? "READ_WRITE" : "READ_ONLY");
+        result.put("overSeatLimit", s.entitlements
+                .seatCount(row.get("tenant_id").toString()) > ((Number) row.get("seat_limit")).longValue());
+        return result;
+    }
+
+    private List<?> moduleList(Object raw) {
+        try {
+            return s.json.readValue(raw.toString(), List.class);
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private Map<String, Object> saveRecord(Principal p, String kind, String id, Map<String, Object> body) {
+        platform(p);
+        kind(kind);
+        var value = new LinkedHashMap<>(body);
+        value.remove("id");
+        value.remove("version");
+        Inputs.text(value, "title", 180);
+        String status = Inputs.optional(value, "status", 30, "OPEN");
+        value.put("status", status);
+        if (s.encode(value).length() > 30000)
+            throw new ApiException(400, "Operational record is too large.");
+        validateRecord(kind, value, status);
+        if (id == null) {
+            id = s.id();
+            s.db.update("INSERT INTO platform_records(id,kind,payload,status,actor_id) VALUES (?,?,?,?,?)", id, kind,
+                    s.encode(value), status, p.userId());
+        } else {
+            var old = s.first(
+                    s.db.queryForList("SELECT * FROM platform_records WHERE kind=? AND id=? FOR UPDATE", kind, id),
+                    "Operational record");
+            if (s.integer(body, "version", -1, 1, Integer.MAX_VALUE) != ((Number) old.get("version")).intValue())
+                throw new ApiException(409, "Operational record changed. Reload before editing.");
+            s.db.update(
+                    "UPDATE platform_records SET payload=?,status=?,version=version+1,updated_at=UTC_TIMESTAMP(6) WHERE kind=? AND id=?",
+                    s.encode(value), status, kind, id);
+        }
+        s.audit.log(p, "PLATFORM_RECORD_SAVED", kind, id);
+        return recordView(s.db.queryForMap("SELECT * FROM platform_records WHERE id=?", id));
+    }
+
+    private void validateRecord(String kind, Map<String, Object> body, String status) {
+        if (!Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "RECORDED", "VERIFIED", "FAILED", "DRAFT", "IN_REVIEW",
+                "APPROVED", "RELEASED", "ROLLED_BACK", "PENDING", "PASSED", "CLOSED", "ACCEPTED", "REQUESTED",
+                "REVIEWED", "FULFILLED", "REJECTED", "ACTIVE", "INACTIVE", "ISSUED", "PAID", "VOID").contains(status))
+            throw new ApiException(400, "Unsupported operational record status.");
+        if (kind.equals("incidents")) {
+            String severity = Inputs.text(body, "severity", 10);
+            if (!Set.of("SEV1", "SEV2", "SEV3", "SEV4").contains(severity))
+                throw new ApiException(400, "Incident severity must be SEV1–SEV4.");
+            if (status.equals("RESOLVED")) {
+                Inputs.text(body, "cause", 1000);
+                Inputs.text(body, "remediation", 2000);
+            }
+        }
+        if (kind.equals("defects") || kind.equals("securityReviews")) {
+            if (!Set.of("CRITICAL", "HIGH", "MEDIUM", "LOW").contains(Inputs.text(body, "severity", 10)))
+                throw new ApiException(400, "Choose CRITICAL, HIGH, MEDIUM or LOW severity.");
+        }
+        if (kind.equals("backupRecords") && status.equals("VERIFIED")) {
+            if (!Inputs.text(body, "artifactSha256", 64).matches("[0-9a-fA-F]{64}"))
+                throw new ApiException(400, "Supply the encrypted backup artifact SHA-256.");
+            Inputs.text(body, "restoreEvidence", 2000);
+            s.integer(body, "rpoMinutes", -1, 0, 10000000);
+            s.integer(body, "rtoMinutes", -1, 0, 10000000);
+        }
+        if (kind.equals("uatCases") && status.equals("PASSED")) {
+            Inputs.text(body, "expectedResult", 2000);
+            Inputs.text(body, "actualResult", 2000);
+            Inputs.text(body, "evidence", 2000);
+        }
+        if (kind.equals("releases") && Set.of("APPROVED", "RELEASED").contains(status)) {
+            Inputs.text(body, "evidence", 2000);
+            Inputs.text(body, "approvedBy", 180);
+            long blockers = s.db.queryForObject(
+                    "SELECT COUNT(*) FROM platform_records WHERE (kind='defects' AND status NOT IN ('CLOSED','ACCEPTED') AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.severity')) IN ('HIGH','CRITICAL')) OR (kind='uatCases' AND status='FAILED')",
+                    Long.class);
+            if (blockers > 0)
+                throw new ApiException(409,
+                        "Recorded high-severity defects or failed UAT cases block release approval.");
+        }
+        if (kind.equals("retentionPolicies")) {
+            s.integer(body, "retentionDays", -1, 0, 36500);
+            Inputs.text(body, "category", 80);
+            Inputs.text(body, "legalBasis", 1000);
+        }
+        if (kind.equals("dataRequests")) {
+            if (!Set.of("EXPORT", "DELETE").contains(Inputs.text(body, "requestType", 20)))
+                throw new ApiException(400, "Data request type must be EXPORT or DELETE.");
+            String tenant = Inputs.text(body, "tenantId", 36);
+            if (s.db.queryForObject("SELECT COUNT(*) FROM tenants WHERE id=?", Integer.class, tenant) != 1)
+                throw new ApiException(404, "Requested tenant not found.");
+            if (status.equals("FULFILLED"))
+                Inputs.text(body, "evidence", 2000);
+        }
+        if (kind.equals("billingDocuments")) {
+            if (s.decimal(body, "amount", java.math.BigDecimal.valueOf(-1)).signum() < 0)
+                throw new ApiException(400, "Billing amount cannot be negative.");
+            if (!Inputs.text(body, "currency", 3).matches("[A-Z]{3}"))
+                throw new ApiException(400, "Currency must be a three-letter ISO code.");
+        }
+    }
+
+    private Map<String, Object> recordView(Map<String, Object> row) {
+        var value = s.decode(row.get("payload"));
+        value.put("id", row.get("id"));
+        value.put("version", row.get("version"));
+        value.put("status", row.get("status"));
+        value.put("createdAt", row.get("created_at"));
+        value.put("updatedAt", row.get("updated_at"));
+        return value;
+    }
+
+    private void platform(Principal p) {
+        Inputs.requireRole(p, "PLATFORM_ADMIN");
+    }
+
+    private void kind(String kind) {
+        if (!KINDS.contains(kind))
+            throw new ApiException(404, "Unknown platform record collection.");
+    }
+
+    private Timestamp timestamp(String value) {
+        try {
+            return Timestamp.from(
+                    value.length() == 10 ? LocalDate.parse(value).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
+                            : Instant.parse(value));
+        } catch (Exception ex) {
+            throw new ApiException(400, "Use an ISO date or UTC timestamp for expiry.");
+        }
+    }
 }

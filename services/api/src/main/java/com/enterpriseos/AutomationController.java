@@ -9,36 +9,438 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-@RestController @RequestMapping("/api/v1/org")
+@RestController
+@RequestMapping("/api/v1/org")
 public class AutomationController {
-    private final AutomationSupport s;private final NotificationStream stream;private final WorkflowFormService forms;private final NotificationVisibility notificationVisibility;
-    public AutomationController(AutomationSupport support,NotificationStream stream,WorkflowFormService forms,NotificationVisibility visibility){this.s=support;this.stream=stream;this.forms=forms;this.notificationVisibility=visibility;}
-    @GetMapping("/workflows/definitions") public List<Map<String,Object>> definitions(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT id,name,description,published_version AS publishedVersion,row_version AS version,draft FROM workflow_definitions WHERE tenant_id=? ORDER BY created_at DESC",principal.tenantId()).stream().map(this::definitionView).toList();}
-    @PostMapping("/workflows/definitions") @Transactional public Map<String,Object> createDefinition(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN","MANAGER");s.lock(principal,"WORKFLOWS",true);String id=s.id(),name=Inputs.text(body,"name",180);Map<String,Object> draft=validateDefinition(body);s.db.update("INSERT INTO workflow_definitions(id,tenant_id,name,description,draft,created_by) VALUES (?,?,?,?,?,?)",id,principal.tenantId(),name,Inputs.optional(body,"description",1000,""),s.encode(draft),principal.userId());s.audit.log(principal,"WORKFLOW_DRAFT_CREATED","workflow",id);return definitionView(definition(principal,id));}
-    @PutMapping("/workflows/definitions/{id}") @Transactional public Map<String,Object> editDefinition(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN","MANAGER");s.lock(principal,"WORKFLOWS",false);var old=definition(principal,id);int version=s.integer(body,"version",-1,1,Integer.MAX_VALUE);if(version!=((Number)old.get("row_version")).intValue())throw new ApiException(409,"Definition changed. Reload before editing.");s.db.update("UPDATE workflow_definitions SET name=?,description=?,draft=?,row_version=row_version+1 WHERE tenant_id=? AND id=?",Inputs.text(body,"name",180),Inputs.optional(body,"description",1000,""),s.encode(validateDefinition(mergedForm(body,old))),principal.tenantId(),id);s.audit.log(principal,"WORKFLOW_DRAFT_UPDATED","workflow",id);return definitionView(definition(principal,id));}
-    @PostMapping("/workflows/definitions/{id}/publish") @Transactional public Map<String,Object> publish(@RequestAttribute Principal principal,@PathVariable String id){s.allow(principal,"ADMIN","MANAGER");s.lock(principal,"WORKFLOWS",false);var definition=definition(principal,id);int current=((Number)definition.get("published_version")).intValue();String draft=s.encode(s.decode(definition.get("draft")));if(current>0){String latest=s.db.queryForObject("SELECT snapshot FROM workflow_versions WHERE definition_id=? AND version=?",String.class,id,current);if(s.decode(latest).equals(s.decode(draft)))throw new ApiException(409,"This draft is already published. Edit it before publishing a new version.");}int next=current+1;String versionId=s.id();s.db.update("INSERT INTO workflow_versions(id,tenant_id,definition_id,version,snapshot) VALUES (?,?,?,?,?)",versionId,principal.tenantId(),id,next,draft);s.db.update("UPDATE workflow_definitions SET published_version=?,row_version=row_version+1 WHERE id=? AND tenant_id=?",next,id,principal.tenantId());s.audit.log(principal,"WORKFLOW_PUBLISHED","workflow",id);return Map.of("id",id,"publishedVersion",next,"versionId",versionId);}
-    @GetMapping("/workflows/definitions/{id}/versions") public List<Map<String,Object>> versions(@RequestAttribute Principal principal,@PathVariable String id){s.org(principal);definition(principal,id);return s.db.queryForList("SELECT id,version,snapshot,created_at AS createdAt FROM workflow_versions WHERE tenant_id=? AND definition_id=? ORDER BY version DESC",principal.tenantId(),id).stream().map(row->{row.put("snapshot",s.decode(row.get("snapshot")));return row;}).toList();}
-    @GetMapping("/workflows/instances") public List<Map<String,Object>> instances(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT i.*,d.name AS definition_name,v.version AS definition_version,v.definition_id AS definition_id FROM workflow_instances i JOIN workflow_versions v ON v.id=i.definition_version_id JOIN workflow_definitions d ON d.id=v.definition_id WHERE i.tenant_id=? ORDER BY i.created_at DESC LIMIT 500",principal.tenantId()).stream().filter(row->visible(principal,row)).map(this::instanceView).toList();}
-    @PostMapping("/workflows/instances") @Transactional public Map<String,Object> start(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN","HR","MANAGER","MEMBER","SALES","PROCUREMENT","FINANCE","PAYROLL");s.lock(principal,"WORKFLOWS",false);String definitionId=Inputs.text(body,"definitionId",36);var definition=definition(principal,definitionId);int version=((Number)definition.get("published_version")).intValue();if(version<1)throw new ApiException(409,"Publish this workflow before starting an instance.");var published=s.first(s.db.queryForList("SELECT * FROM workflow_versions WHERE tenant_id=? AND definition_id=? AND version=?",principal.tenantId(),definitionId,version),"Workflow version");BigDecimal amount=s.decimal(body,"amount",BigDecimal.ZERO);if(amount.signum()<0)throw new ApiException(400,"Amount cannot be negative.");List<Map<String,Object>> steps=new ArrayList<>();for(var step:s.mapList(s.decode(published.get("snapshot")).get("steps"))){if(amount.compareTo(s.decimal(step,"minAmount",BigDecimal.ZERO))<0||amount.compareTo(s.decimal(step,"maxAmount",new BigDecimal("999999999999999")))>0)continue;var prepared=new LinkedHashMap<>(step);List<String> approvers=s.db.queryForList("SELECT m.user_id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=? AND m.role=? AND m.status='ACTIVE' AND u.status='ACTIVE' AND m.user_id<>?",String.class,principal.tenantId(),step.get("approverRole"),principal.userId());if(approvers.isEmpty())throw new ApiException(409,"No independent active approver exists for step: "+step.get("name"));prepared.put("approverIds",approvers);steps.add(prepared);}if(steps.isEmpty())throw new ApiException(400,"No workflow step matches this amount.");String id=s.id();s.db.update("INSERT INTO workflow_instances(id,tenant_id,definition_version_id,requester_id,title,amount,assignment_snapshot,due_at) VALUES (?,?,?,?,?,?,?,?)",id,principal.tenantId(),published.get("id"),principal.userId(),Inputs.text(body,"title",180),amount,s.encode(forms.instanceSnapshot(published.get("snapshot"),steps,body.get("formData"))),due(steps.getFirst()));s.audit.log(principal,"WORKFLOW_STARTED","workflowInstance",id);notifyApprovers(principal.tenantId(),id,steps.getFirst());return instanceView(instance(principal,id));}
-    @PostMapping("/workflows/instances/{id}/decisions") @Transactional public Map<String,Object> decide(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.org(principal);s.lock(principal,"WORKFLOWS",false);var instance=instance(principal,id);if(!"PENDING".equals(instance.get("state")))throw new ApiException(409,"This workflow is already closed.");if(principal.userId().equals(instance.get("requester_id")))throw new ApiException(403,"A requester cannot approve their own workflow.");int index=((Number)instance.get("current_step")).intValue();var steps=s.mapList(s.decode(instance.get("assignment_snapshot")).get("steps"));var step=steps.get(index);if(!ids(step).contains(principal.userId()))throw new ApiException(403,"You are not assigned to this approval step.");String decision=Inputs.text(body,"decision",30);if(!Set.of("APPROVED","REJECTED").contains(decision))throw new ApiException(400,"Decision must be APPROVED or REJECTED.");if(s.db.queryForObject("SELECT COUNT(*) FROM workflow_actions WHERE instance_id=? AND step_number=? AND actor_id=? AND action IN ('APPROVED','REJECTED')",Integer.class,id,index,principal.userId())>0)throw new ApiException(409,"Your decision was already recorded.");s.db.update("INSERT INTO workflow_actions(id,tenant_id,instance_id,step_number,actor_id,action,reason) VALUES (?,?,?,?,?,?,?)",s.id(),principal.tenantId(),id,index,principal.userId(),decision,Inputs.optional(body,"reason",1000,""));String state="PENDING";if(decision.equals("REJECTED"))state="REJECTED";else{long approved=s.db.queryForList("SELECT actor_id FROM workflow_actions WHERE instance_id=? AND step_number=? AND action='APPROVED'",String.class,id,index).stream().filter(ids(step)::contains).count();if(!"ALL".equals(step.get("mode"))||approved>=ids(step).size()){index++;if(index>=steps.size())state="APPROVED";else notifyApprovers(principal.tenantId(),id,steps.get(index));}}s.db.update("UPDATE workflow_instances SET state=?,current_step=?,row_version=row_version+1,due_at=?,escalated=FALSE WHERE id=? AND tenant_id=?",state,index,state.equals("PENDING")?due(steps.get(index)):Timestamp.from(Instant.now()),id,principal.tenantId());s.audit.log(principal,"WORKFLOW_"+decision,"workflowInstance",id);s.events.notify(principal.tenantId(),instance.get("requester_id").toString(),id+":"+s.id(),"WORKFLOW_DECISION","Workflow decision recorded",instance.get("title")+": "+state);return instanceView(instance(principal,id));}
-    @PostMapping("/workflows/instances/{id}/delegate") @Transactional public Map<String,Object> delegate(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.lock(principal,"WORKFLOWS",false);var instance=instance(principal,id);if(!"PENDING".equals(instance.get("state")))throw new ApiException(409,"This workflow is closed.");var steps=s.mapList(s.decode(instance.get("assignment_snapshot")).get("steps"));int index=((Number)instance.get("current_step")).intValue();var step=steps.get(index);if(!principal.role().equals("ADMIN")&&!ids(step).contains(principal.userId()))throw new ApiException(403,"You cannot delegate this step.");String user=Inputs.text(body,"toUserId",36);s.activeUser(principal.tenantId(),user);if(user.equals(instance.get("requester_id")))throw new ApiException(403,"A requester cannot be their own delegated approver.");var list=new ArrayList<>(ids(step));if(!principal.role().equals("ADMIN"))list.remove(principal.userId());if(!list.contains(user))list.add(user);step.put("approverIds",list);s.db.update("UPDATE workflow_instances SET assignment_snapshot=?,row_version=row_version+1 WHERE id=? AND tenant_id=?",s.encode(forms.replaceSteps(instance.get("assignment_snapshot"),steps)),id,principal.tenantId());s.db.update("INSERT INTO workflow_actions(id,tenant_id,instance_id,step_number,actor_id,action,reason) VALUES (?,?,?,?,?,'DELEGATED',?)",s.id(),principal.tenantId(),id,index,principal.userId(),user);s.audit.log(principal,"WORKFLOW_DELEGATED","workflowInstance",id);notifyApprovers(principal.tenantId(),id,step);return instanceView(instance(principal,id));}
-    @PostMapping("/workflows/instances/{id}/cancel") @Transactional public Map<String,Object> cancel(@RequestAttribute Principal principal,@PathVariable String id){s.lock(principal,"WORKFLOWS",false);var instance=instance(principal,id);if(!principal.role().equals("ADMIN")&&!principal.userId().equals(instance.get("requester_id")))throw new ApiException(403,"Only the requester or administrator can cancel.");if(!"PENDING".equals(instance.get("state")))throw new ApiException(409,"This workflow is already closed.");s.db.update("UPDATE workflow_instances SET state='CANCELLED',row_version=row_version+1 WHERE tenant_id=? AND id=?",principal.tenantId(),id);s.audit.log(principal,"WORKFLOW_CANCELLED","workflowInstance",id);return instanceView(instance(principal,id));}
-    @GetMapping("/workflows/instances/{id}/history") public List<Map<String,Object>> history(@RequestAttribute Principal principal,@PathVariable String id){var instance=instance(principal,id);if(!visible(principal,instance))throw new ApiException(403,"You cannot view this workflow.");return s.db.queryForList("SELECT step_number AS stepNumber,actor_id AS actorId,action,reason,created_at AS createdAt FROM workflow_actions WHERE tenant_id=? AND instance_id=? ORDER BY created_at,id",principal.tenantId(),id);}
-    @GetMapping("/notifications") public List<Map<String,Object>> notifications(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT id,title,body,event_key AS eventKey,read_at AS readAt,created_at AS createdAt FROM notifications WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC LIMIT 200",principal.tenantId(),principal.userId()).stream().filter(row->notificationVisibility.allowed(principal,row.get("eventKey").toString())).toList();}
-    @PatchMapping("/notifications/{id}/read") @Transactional public Map<String,Object> read(@RequestAttribute Principal principal,@PathVariable String id){s.org(principal);if(s.db.update("UPDATE notifications SET read_at=COALESCE(read_at,UTC_TIMESTAMP(6)) WHERE id=? AND tenant_id=? AND user_id=?",id,principal.tenantId(),principal.userId())==0)throw new ApiException(404,"Notification not found.");return Map.of("id",id,"read",true);}
-    @PostMapping("/notifications") @Transactional public Map<String,Object> announce(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"WORKFLOWS",false);String user=Inputs.optional(body,"recipientId",36,"");String title=Inputs.text(body,"title",180),text=Inputs.text(body,"body",2000),key=s.id();if(!user.isEmpty()){s.activeUser(principal.tenantId(),user);s.events.notify(principal.tenantId(),user,key,"ANNOUNCEMENT",title,text);}else for(String member:s.db.queryForList("SELECT user_id FROM memberships WHERE tenant_id=? AND status='ACTIVE'",String.class,principal.tenantId()))s.events.notify(principal.tenantId(),member,key,"ANNOUNCEMENT",title,text);s.audit.log(principal,"ANNOUNCEMENT_SENT","notification",key);return Map.of("id",key,"message","Announcement delivered to active recipients.");}
-    @GetMapping("/notifications/preferences") public List<Map<String,Object>> preferences(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT event_type AS eventType,in_app AS inApp,email FROM notification_preferences WHERE tenant_id=? AND user_id=?",principal.tenantId(),principal.userId());}
-    @PutMapping("/notifications/preferences") @Transactional public Map<String,Object> preferences(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.org(principal);String event=Inputs.text(body,"eventType",100);if(!(body.get("inApp") instanceof Boolean)||!(body.get("email") instanceof Boolean))throw new ApiException(400,"inApp and email must be booleans.");s.db.update("INSERT INTO notification_preferences(tenant_id,user_id,event_type,in_app,email) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE in_app=VALUES(in_app),email=VALUES(email)",principal.tenantId(),principal.userId(),event,body.get("inApp"),body.get("email"));return Map.of("message","Notification preferences saved.");}
-    @GetMapping("/notifications/deliveries") public List<Map<String,Object>> deliveries(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT event_key AS eventKey,channel,status,created_at AS createdAt FROM notification_deliveries WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC LIMIT 200",principal.tenantId(),principal.userId());}
-    @GetMapping(value="/notifications/stream",produces=MediaType.TEXT_EVENT_STREAM_VALUE) public SseEmitter stream(@RequestAttribute Principal principal){s.org(principal);return stream.connect(principal.tenantId(),principal.userId());}
-    private Map<String,Object> definition(Principal p,String id){return s.first(s.db.queryForList("SELECT * FROM workflow_definitions WHERE id=? AND tenant_id=?",id,p.tenantId()),"Workflow definition");}
-    private Map<String,Object> definitionView(Map<String,Object> row){var view=new LinkedHashMap<String,Object>();view.put("id",row.get("id"));view.put("name",row.get("name"));view.put("description",row.get("description"));view.put("publishedVersion",row.containsKey("publishedVersion")?row.get("publishedVersion"):row.get("published_version"));view.put("version",row.containsKey("version")?row.get("version"):row.get("row_version"));view.putAll(s.decode(row.get("draft")));return view;}
-    private Map<String,Object> instance(Principal p,String id){s.org(p);return s.first(s.db.queryForList("SELECT i.*,d.name AS definition_name,v.version AS definition_version,v.definition_id AS definition_id FROM workflow_instances i JOIN workflow_versions v ON v.id=i.definition_version_id JOIN workflow_definitions d ON d.id=v.definition_id WHERE i.id=? AND i.tenant_id=?",id,p.tenantId()),"Workflow instance");}
-    private Map<String,Object> instanceView(Map<String,Object> row){var result=new LinkedHashMap<String,Object>();for(String key:List.of("id","title","amount","state"))result.put(key,row.get(key));result.put("status",row.get("state"));result.put("requesterId",row.get("requester_id"));result.put("definitionName",row.get("definition_name"));result.put("definitionId",row.get("definition_id"));result.put("definitionVersion",row.get("definition_version"));result.put("currentStep",row.get("current_step"));result.put("version",row.get("row_version"));result.put("dueAt",row.get("due_at"));result.put("escalated",row.get("escalated"));result.put("steps",s.decode(row.get("assignment_snapshot")).get("steps"));result.put("formFields",s.decode(row.get("assignment_snapshot")).getOrDefault("formFields",List.of()));result.put("formData",s.decode(row.get("assignment_snapshot")).getOrDefault("formData",Map.of()));result.put("resubmissionOf",row.get("resubmission_of"));return result;}
-    private boolean visible(Principal p,Map<String,Object> row){if(Set.of("ADMIN","AUDITOR").contains(p.role())||p.userId().equals(row.get("requester_id")))return true;return s.mapList(s.decode(row.get("assignment_snapshot")).get("steps")).stream().anyMatch(step->ids(step).contains(p.userId()));}
-    @SuppressWarnings("unchecked") private List<String> ids(Map<String,Object> step){return (List<String>)step.getOrDefault("approverIds",List.of());}
-    private Timestamp due(Map<String,Object> step){return Timestamp.from(Instant.now().plusSeconds(((Number)step.get("dueHours")).longValue()*3600));}
-    private void notifyApprovers(String tenant,String id,Map<String,Object> step){for(String user:ids(step))s.events.notify(tenant,user,id+":"+step.get("name")+":"+user,"APPROVAL_REQUIRED","Approval required",step.get("name")+" requires your review.");}
-    private Map<String,Object> mergedForm(Map<String,Object> body,Map<String,Object> old){var merged=new LinkedHashMap<>(body);if(!merged.containsKey("formFields"))merged.put("formFields",s.decode(old.get("draft")).getOrDefault("formFields",List.of()));return merged;}
-    private Map<String,Object> validateDefinition(Map<String,Object> body){var input=s.mapList(body.get("steps"));if(input.isEmpty()||input.size()>12)throw new ApiException(400,"A workflow requires 1 to 12 approval steps.");List<Map<String,Object>> steps=new ArrayList<>();Set<String> names=new HashSet<>();for(var step:input){String name=Inputs.text(step,"name",100),role=Inputs.text(step,"approverRole",24),mode=Inputs.optional(step,"mode",10,"ANY");if(!names.add(name))throw new ApiException(400,"Step names must be unique.");if(!Inputs.ROLES.contains(role)||Set.of("MEMBER","AUDITOR").contains(role))throw new ApiException(400,"Choose a role permitted to approve.");if(!Set.of("ANY","ALL").contains(mode))throw new ApiException(400,"Step mode must be ANY or ALL.");BigDecimal min=s.decimal(step,"minAmount",BigDecimal.ZERO),max=s.decimal(step,"maxAmount",new BigDecimal("999999999999999"));if(min.signum()<0||max.compareTo(min)<0)throw new ApiException(400,"Workflow amount conditions are invalid.");steps.add(Map.of("name",name,"approverRole",role,"mode",mode,"dueHours",s.integer(step,"dueHours",48,1,720),"minAmount",min,"maxAmount",max));}return Map.of("steps",steps,"formFields",forms.fields(body.get("formFields")));}
+    private final AutomationSupport s;
+    private final NotificationStream stream;
+    private final WorkflowFormService forms;
+    private final NotificationVisibility notificationVisibility;
+
+    public AutomationController(AutomationSupport support, NotificationStream stream, WorkflowFormService forms,
+            NotificationVisibility visibility) {
+        this.s = support;
+        this.stream = stream;
+        this.forms = forms;
+        this.notificationVisibility = visibility;
+    }
+
+    @GetMapping("/workflows/definitions")
+    public List<Map<String, Object>> definitions(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT id,name,description,published_version AS publishedVersion,row_version AS version,draft FROM workflow_definitions WHERE tenant_id=? ORDER BY created_at DESC",
+                principal.tenantId()).stream().map(this::definitionView).toList();
+    }
+
+    @PostMapping("/workflows/definitions")
+    @Transactional
+    public Map<String, Object> createDefinition(@RequestAttribute Principal principal,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN", "MANAGER");
+        s.lock(principal, "WORKFLOWS", true);
+        String id = s.id(), name = Inputs.text(body, "name", 180);
+        Map<String, Object> draft = validateDefinition(body);
+        s.db.update(
+                "INSERT INTO workflow_definitions(id,tenant_id,name,description,draft,created_by) VALUES (?,?,?,?,?,?)",
+                id, principal.tenantId(), name, Inputs.optional(body, "description", 1000, ""), s.encode(draft),
+                principal.userId());
+        s.audit.log(principal, "WORKFLOW_DRAFT_CREATED", "workflow", id);
+        return definitionView(definition(principal, id));
+    }
+
+    @PutMapping("/workflows/definitions/{id}")
+    @Transactional
+    public Map<String, Object> editDefinition(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN", "MANAGER");
+        s.lock(principal, "WORKFLOWS", false);
+        var old = definition(principal, id);
+        int version = s.integer(body, "version", -1, 1, Integer.MAX_VALUE);
+        if (version != ((Number) old.get("row_version")).intValue())
+            throw new ApiException(409, "Definition changed. Reload before editing.");
+        s.db.update(
+                "UPDATE workflow_definitions SET name=?,description=?,draft=?,row_version=row_version+1 WHERE tenant_id=? AND id=?",
+                Inputs.text(body, "name", 180), Inputs.optional(body, "description", 1000, ""),
+                s.encode(validateDefinition(mergedForm(body, old))), principal.tenantId(), id);
+        s.audit.log(principal, "WORKFLOW_DRAFT_UPDATED", "workflow", id);
+        return definitionView(definition(principal, id));
+    }
+
+    @PostMapping("/workflows/definitions/{id}/publish")
+    @Transactional
+    public Map<String, Object> publish(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.allow(principal, "ADMIN", "MANAGER");
+        s.lock(principal, "WORKFLOWS", false);
+        var definition = definition(principal, id);
+        int current = ((Number) definition.get("published_version")).intValue();
+        String draft = s.encode(s.decode(definition.get("draft")));
+        if (current > 0) {
+            String latest = s.db.queryForObject(
+                    "SELECT snapshot FROM workflow_versions WHERE definition_id=? AND version=?", String.class, id,
+                    current);
+            if (s.decode(latest).equals(s.decode(draft)))
+                throw new ApiException(409,
+                        "This draft is already published. Edit it before publishing a new version.");
+        }
+        int next = current + 1;
+        String versionId = s.id();
+        s.db.update("INSERT INTO workflow_versions(id,tenant_id,definition_id,version,snapshot) VALUES (?,?,?,?,?)",
+                versionId, principal.tenantId(), id, next, draft);
+        s.db.update(
+                "UPDATE workflow_definitions SET published_version=?,row_version=row_version+1 WHERE id=? AND tenant_id=?",
+                next, id, principal.tenantId());
+        s.audit.log(principal, "WORKFLOW_PUBLISHED", "workflow", id);
+        return Map.of("id", id, "publishedVersion", next, "versionId", versionId);
+    }
+
+    @GetMapping("/workflows/definitions/{id}/versions")
+    public List<Map<String, Object>> versions(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.org(principal);
+        definition(principal, id);
+        return s.db.queryForList(
+                "SELECT id,version,snapshot,created_at AS createdAt FROM workflow_versions WHERE tenant_id=? AND definition_id=? ORDER BY version DESC",
+                principal.tenantId(), id).stream().map(row -> {
+                    row.put("snapshot", s.decode(row.get("snapshot")));
+                    return row;
+                }).toList();
+    }
+
+    @GetMapping("/workflows/instances")
+    public List<Map<String, Object>> instances(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT i.*,d.name AS definition_name,v.version AS definition_version,v.definition_id AS definition_id FROM workflow_instances i JOIN workflow_versions v ON v.id=i.definition_version_id JOIN workflow_definitions d ON d.id=v.definition_id WHERE i.tenant_id=? ORDER BY i.created_at DESC LIMIT 500",
+                principal.tenantId()).stream().filter(row -> visible(principal, row)).map(this::instanceView).toList();
+    }
+
+    @PostMapping("/workflows/instances")
+    @Transactional
+    public Map<String, Object> start(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN", "HR", "MANAGER", "MEMBER", "SALES", "PROCUREMENT", "FINANCE", "PAYROLL");
+        s.lock(principal, "WORKFLOWS", false);
+        String definitionId = Inputs.text(body, "definitionId", 36);
+        var definition = definition(principal, definitionId);
+        int version = ((Number) definition.get("published_version")).intValue();
+        if (version < 1)
+            throw new ApiException(409, "Publish this workflow before starting an instance.");
+        var published = s.first(
+                s.db.queryForList("SELECT * FROM workflow_versions WHERE tenant_id=? AND definition_id=? AND version=?",
+                        principal.tenantId(), definitionId, version),
+                "Workflow version");
+        BigDecimal amount = s.decimal(body, "amount", BigDecimal.ZERO);
+        if (amount.signum() < 0)
+            throw new ApiException(400, "Amount cannot be negative.");
+        List<Map<String, Object>> steps = new ArrayList<>();
+        for (var step : s.mapList(s.decode(published.get("snapshot")).get("steps"))) {
+            if (amount.compareTo(s.decimal(step, "minAmount", BigDecimal.ZERO)) < 0
+                    || amount.compareTo(s.decimal(step, "maxAmount", new BigDecimal("999999999999999"))) > 0)
+                continue;
+            var prepared = new LinkedHashMap<>(step);
+            List<String> approvers = s.db.queryForList(
+                    "SELECT m.user_id FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=? AND m.role=? AND m.status='ACTIVE' AND u.status='ACTIVE' AND m.user_id<>?",
+                    String.class, principal.tenantId(), step.get("approverRole"), principal.userId());
+            if (approvers.isEmpty())
+                throw new ApiException(409, "No independent active approver exists for step: " + step.get("name"));
+            prepared.put("approverIds", approvers);
+            steps.add(prepared);
+        }
+        if (steps.isEmpty())
+            throw new ApiException(400, "No workflow step matches this amount.");
+        String id = s.id();
+        s.db.update(
+                "INSERT INTO workflow_instances(id,tenant_id,definition_version_id,requester_id,title,amount,assignment_snapshot,due_at) VALUES (?,?,?,?,?,?,?,?)",
+                id, principal.tenantId(), published.get("id"), principal.userId(), Inputs.text(body, "title", 180),
+                amount, s.encode(forms.instanceSnapshot(published.get("snapshot"), steps, body.get("formData"))),
+                due(steps.getFirst()));
+        s.audit.log(principal, "WORKFLOW_STARTED", "workflowInstance", id);
+        notifyApprovers(principal.tenantId(), id, steps.getFirst());
+        return instanceView(instance(principal, id));
+    }
+
+    @PostMapping("/workflows/instances/{id}/decisions")
+    @Transactional
+    public Map<String, Object> decide(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.org(principal);
+        s.lock(principal, "WORKFLOWS", false);
+        var instance = instance(principal, id);
+        if (!"PENDING".equals(instance.get("state")))
+            throw new ApiException(409, "This workflow is already closed.");
+        if (principal.userId().equals(instance.get("requester_id")))
+            throw new ApiException(403, "A requester cannot approve their own workflow.");
+        int index = ((Number) instance.get("current_step")).intValue();
+        var steps = s.mapList(s.decode(instance.get("assignment_snapshot")).get("steps"));
+        var step = steps.get(index);
+        if (!ids(step).contains(principal.userId()))
+            throw new ApiException(403, "You are not assigned to this approval step.");
+        String decision = Inputs.text(body, "decision", 30);
+        if (!Set.of("APPROVED", "REJECTED").contains(decision))
+            throw new ApiException(400, "Decision must be APPROVED or REJECTED.");
+        if (s.db.queryForObject(
+                "SELECT COUNT(*) FROM workflow_actions WHERE instance_id=? AND step_number=? AND actor_id=? AND action IN ('APPROVED','REJECTED')",
+                Integer.class, id, index, principal.userId()) > 0)
+            throw new ApiException(409, "Your decision was already recorded.");
+        s.db.update(
+                "INSERT INTO workflow_actions(id,tenant_id,instance_id,step_number,actor_id,action,reason) VALUES (?,?,?,?,?,?,?)",
+                s.id(), principal.tenantId(), id, index, principal.userId(), decision,
+                Inputs.optional(body, "reason", 1000, ""));
+        String state = "PENDING";
+        if (decision.equals("REJECTED"))
+            state = "REJECTED";
+        else {
+            long approved = s.db.queryForList(
+                    "SELECT actor_id FROM workflow_actions WHERE instance_id=? AND step_number=? AND action='APPROVED'",
+                    String.class, id, index).stream().filter(ids(step)::contains).count();
+            if (!"ALL".equals(step.get("mode")) || approved >= ids(step).size()) {
+                index++;
+                if (index >= steps.size())
+                    state = "APPROVED";
+                else
+                    notifyApprovers(principal.tenantId(), id, steps.get(index));
+            }
+        }
+        s.db.update(
+                "UPDATE workflow_instances SET state=?,current_step=?,row_version=row_version+1,due_at=?,escalated=FALSE WHERE id=? AND tenant_id=?",
+                state, index, state.equals("PENDING") ? due(steps.get(index)) : Timestamp.from(Instant.now()), id,
+                principal.tenantId());
+        s.audit.log(principal, "WORKFLOW_" + decision, "workflowInstance", id);
+        s.events.notify(principal.tenantId(), instance.get("requester_id").toString(), id + ":" + s.id(),
+                "WORKFLOW_DECISION", "Workflow decision recorded", instance.get("title") + ": " + state);
+        return instanceView(instance(principal, id));
+    }
+
+    @PostMapping("/workflows/instances/{id}/delegate")
+    @Transactional
+    public Map<String, Object> delegate(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.lock(principal, "WORKFLOWS", false);
+        var instance = instance(principal, id);
+        if (!"PENDING".equals(instance.get("state")))
+            throw new ApiException(409, "This workflow is closed.");
+        var steps = s.mapList(s.decode(instance.get("assignment_snapshot")).get("steps"));
+        int index = ((Number) instance.get("current_step")).intValue();
+        var step = steps.get(index);
+        if (!principal.role().equals("ADMIN") && !ids(step).contains(principal.userId()))
+            throw new ApiException(403, "You cannot delegate this step.");
+        String user = Inputs.text(body, "toUserId", 36);
+        s.activeUser(principal.tenantId(), user);
+        if (user.equals(instance.get("requester_id")))
+            throw new ApiException(403, "A requester cannot be their own delegated approver.");
+        var list = new ArrayList<>(ids(step));
+        if (!principal.role().equals("ADMIN"))
+            list.remove(principal.userId());
+        if (!list.contains(user))
+            list.add(user);
+        step.put("approverIds", list);
+        s.db.update(
+                "UPDATE workflow_instances SET assignment_snapshot=?,row_version=row_version+1 WHERE id=? AND tenant_id=?",
+                s.encode(forms.replaceSteps(instance.get("assignment_snapshot"), steps)), id, principal.tenantId());
+        s.db.update(
+                "INSERT INTO workflow_actions(id,tenant_id,instance_id,step_number,actor_id,action,reason) VALUES (?,?,?,?,?,'DELEGATED',?)",
+                s.id(), principal.tenantId(), id, index, principal.userId(), user);
+        s.audit.log(principal, "WORKFLOW_DELEGATED", "workflowInstance", id);
+        notifyApprovers(principal.tenantId(), id, step);
+        return instanceView(instance(principal, id));
+    }
+
+    @PostMapping("/workflows/instances/{id}/cancel")
+    @Transactional
+    public Map<String, Object> cancel(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.lock(principal, "WORKFLOWS", false);
+        var instance = instance(principal, id);
+        if (!principal.role().equals("ADMIN") && !principal.userId().equals(instance.get("requester_id")))
+            throw new ApiException(403, "Only the requester or administrator can cancel.");
+        if (!"PENDING".equals(instance.get("state")))
+            throw new ApiException(409, "This workflow is already closed.");
+        s.db.update(
+                "UPDATE workflow_instances SET state='CANCELLED',row_version=row_version+1 WHERE tenant_id=? AND id=?",
+                principal.tenantId(), id);
+        s.audit.log(principal, "WORKFLOW_CANCELLED", "workflowInstance", id);
+        return instanceView(instance(principal, id));
+    }
+
+    @GetMapping("/workflows/instances/{id}/history")
+    public List<Map<String, Object>> history(@RequestAttribute Principal principal, @PathVariable String id) {
+        var instance = instance(principal, id);
+        if (!visible(principal, instance))
+            throw new ApiException(403, "You cannot view this workflow.");
+        return s.db.queryForList(
+                "SELECT step_number AS stepNumber,actor_id AS actorId,action,reason,created_at AS createdAt FROM workflow_actions WHERE tenant_id=? AND instance_id=? ORDER BY created_at,id",
+                principal.tenantId(), id);
+    }
+
+    @GetMapping("/notifications")
+    public List<Map<String, Object>> notifications(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT id,title,body,event_key AS eventKey,read_at AS readAt,created_at AS createdAt FROM notifications WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC LIMIT 200",
+                principal.tenantId(), principal.userId()).stream()
+                .filter(row -> notificationVisibility.allowed(principal, row.get("eventKey").toString())).toList();
+    }
+
+    @PatchMapping("/notifications/{id}/read")
+    @Transactional
+    public Map<String, Object> read(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.org(principal);
+        if (s.db.update(
+                "UPDATE notifications SET read_at=COALESCE(read_at,UTC_TIMESTAMP(6)) WHERE id=? AND tenant_id=? AND user_id=?",
+                id, principal.tenantId(), principal.userId()) == 0)
+            throw new ApiException(404, "Notification not found.");
+        return Map.of("id", id, "read", true);
+    }
+
+    @PostMapping("/notifications")
+    @Transactional
+    public Map<String, Object> announce(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "WORKFLOWS", false);
+        String user = Inputs.optional(body, "recipientId", 36, "");
+        String title = Inputs.text(body, "title", 180), text = Inputs.text(body, "body", 2000), key = s.id();
+        if (!user.isEmpty()) {
+            s.activeUser(principal.tenantId(), user);
+            s.events.notify(principal.tenantId(), user, key, "ANNOUNCEMENT", title, text);
+        } else
+            for (String member : s.db.queryForList(
+                    "SELECT user_id FROM memberships WHERE tenant_id=? AND status='ACTIVE'", String.class,
+                    principal.tenantId()))
+                s.events.notify(principal.tenantId(), member, key, "ANNOUNCEMENT", title, text);
+        s.audit.log(principal, "ANNOUNCEMENT_SENT", "notification", key);
+        return Map.of("id", key, "message", "Announcement delivered to active recipients.");
+    }
+
+    @GetMapping("/notifications/preferences")
+    public List<Map<String, Object>> preferences(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT event_type AS eventType,in_app AS inApp,email FROM notification_preferences WHERE tenant_id=? AND user_id=?",
+                principal.tenantId(), principal.userId());
+    }
+
+    @PutMapping("/notifications/preferences")
+    @Transactional
+    public Map<String, Object> preferences(@RequestAttribute Principal principal,
+            @RequestBody Map<String, Object> body) {
+        s.org(principal);
+        String event = Inputs.text(body, "eventType", 100);
+        if (!(body.get("inApp") instanceof Boolean) || !(body.get("email") instanceof Boolean))
+            throw new ApiException(400, "inApp and email must be booleans.");
+        s.db.update(
+                "INSERT INTO notification_preferences(tenant_id,user_id,event_type,in_app,email) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE in_app=VALUES(in_app),email=VALUES(email)",
+                principal.tenantId(), principal.userId(), event, body.get("inApp"), body.get("email"));
+        return Map.of("message", "Notification preferences saved.");
+    }
+
+    @GetMapping("/notifications/deliveries")
+    public List<Map<String, Object>> deliveries(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT event_key AS eventKey,channel,status,created_at AS createdAt FROM notification_deliveries WHERE tenant_id=? AND user_id=? ORDER BY created_at DESC LIMIT 200",
+                principal.tenantId(), principal.userId());
+    }
+
+    @GetMapping(value = "/notifications/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return stream.connect(principal.tenantId(), principal.userId());
+    }
+
+    private Map<String, Object> definition(Principal p, String id) {
+        return s.first(
+                s.db.queryForList("SELECT * FROM workflow_definitions WHERE id=? AND tenant_id=?", id, p.tenantId()),
+                "Workflow definition");
+    }
+
+    private Map<String, Object> definitionView(Map<String, Object> row) {
+        var view = new LinkedHashMap<String, Object>();
+        view.put("id", row.get("id"));
+        view.put("name", row.get("name"));
+        view.put("description", row.get("description"));
+        view.put("publishedVersion",
+                row.containsKey("publishedVersion") ? row.get("publishedVersion") : row.get("published_version"));
+        view.put("version", row.containsKey("version") ? row.get("version") : row.get("row_version"));
+        view.putAll(s.decode(row.get("draft")));
+        return view;
+    }
+
+    private Map<String, Object> instance(Principal p, String id) {
+        s.org(p);
+        return s.first(s.db.queryForList(
+                "SELECT i.*,d.name AS definition_name,v.version AS definition_version,v.definition_id AS definition_id FROM workflow_instances i JOIN workflow_versions v ON v.id=i.definition_version_id JOIN workflow_definitions d ON d.id=v.definition_id WHERE i.id=? AND i.tenant_id=?",
+                id, p.tenantId()), "Workflow instance");
+    }
+
+    private Map<String, Object> instanceView(Map<String, Object> row) {
+        var result = new LinkedHashMap<String, Object>();
+        for (String key : List.of("id", "title", "amount", "state"))
+            result.put(key, row.get(key));
+        result.put("status", row.get("state"));
+        result.put("requesterId", row.get("requester_id"));
+        result.put("definitionName", row.get("definition_name"));
+        result.put("definitionId", row.get("definition_id"));
+        result.put("definitionVersion", row.get("definition_version"));
+        result.put("currentStep", row.get("current_step"));
+        result.put("version", row.get("row_version"));
+        result.put("dueAt", row.get("due_at"));
+        result.put("escalated", row.get("escalated"));
+        result.put("steps", s.decode(row.get("assignment_snapshot")).get("steps"));
+        result.put("formFields", s.decode(row.get("assignment_snapshot")).getOrDefault("formFields", List.of()));
+        result.put("formData", s.decode(row.get("assignment_snapshot")).getOrDefault("formData", Map.of()));
+        result.put("resubmissionOf", row.get("resubmission_of"));
+        return result;
+    }
+
+    private boolean visible(Principal p, Map<String, Object> row) {
+        if (Set.of("ADMIN", "AUDITOR").contains(p.role()) || p.userId().equals(row.get("requester_id")))
+            return true;
+        return s.mapList(s.decode(row.get("assignment_snapshot")).get("steps")).stream()
+                .anyMatch(step -> ids(step).contains(p.userId()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> ids(Map<String, Object> step) {
+        return (List<String>) step.getOrDefault("approverIds", List.of());
+    }
+
+    private Timestamp due(Map<String, Object> step) {
+        return Timestamp.from(Instant.now().plusSeconds(((Number) step.get("dueHours")).longValue() * 3600));
+    }
+
+    private void notifyApprovers(String tenant, String id, Map<String, Object> step) {
+        for (String user : ids(step))
+            s.events.notify(tenant, user, id + ":" + step.get("name") + ":" + user, "APPROVAL_REQUIRED",
+                    "Approval required", step.get("name") + " requires your review.");
+    }
+
+    private Map<String, Object> mergedForm(Map<String, Object> body, Map<String, Object> old) {
+        var merged = new LinkedHashMap<>(body);
+        if (!merged.containsKey("formFields"))
+            merged.put("formFields", s.decode(old.get("draft")).getOrDefault("formFields", List.of()));
+        return merged;
+    }
+
+    private Map<String, Object> validateDefinition(Map<String, Object> body) {
+        var input = s.mapList(body.get("steps"));
+        if (input.isEmpty() || input.size() > 12)
+            throw new ApiException(400, "A workflow requires 1 to 12 approval steps.");
+        List<Map<String, Object>> steps = new ArrayList<>();
+        Set<String> names = new HashSet<>();
+        for (var step : input) {
+            String name = Inputs.text(step, "name", 100), role = Inputs.text(step, "approverRole", 24),
+                    mode = Inputs.optional(step, "mode", 10, "ANY");
+            if (!names.add(name))
+                throw new ApiException(400, "Step names must be unique.");
+            if (!Inputs.ROLES.contains(role) || Set.of("MEMBER", "AUDITOR").contains(role))
+                throw new ApiException(400, "Choose a role permitted to approve.");
+            if (!Set.of("ANY", "ALL").contains(mode))
+                throw new ApiException(400, "Step mode must be ANY or ALL.");
+            BigDecimal min = s.decimal(step, "minAmount", BigDecimal.ZERO),
+                    max = s.decimal(step, "maxAmount", new BigDecimal("999999999999999"));
+            if (min.signum() < 0 || max.compareTo(min) < 0)
+                throw new ApiException(400, "Workflow amount conditions are invalid.");
+            steps.add(Map.of("name", name, "approverRole", role, "mode", mode, "dueHours",
+                    s.integer(step, "dueHours", 48, 1, 720), "minAmount", min, "maxAmount", max));
+        }
+        return Map.of("steps", steps, "formFields", forms.fields(body.get("formFields")));
+    }
 }

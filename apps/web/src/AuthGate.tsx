@@ -1,13 +1,243 @@
-import React,{useEffect,useState} from 'react';
-import {api} from './data';
-import {Icon} from './icons';
-import {Button,Field,FieldInput} from './ui';
+import React, { useEffect, useState } from 'react';
+import { api } from './data';
+import { Icon } from './icons';
+import { Button, Field, FieldInput } from './ui';
 
-export function AuthGate({checking,onLogin,onFlow,onAppearance}:{checking:boolean;onLogin:(v:{email:string;password:string;otp?:string})=>Promise<void>;onFlow:(flow:string)=>void;onAppearance:()=>void}){
- const localFile=typeof location!=='undefined'&&location.protocol==='file:';
- const [setup,setSetup]=useState(false),[setupChecking,setSetupChecking]=useState(true),[values,setValues]=useState<Record<string,any>>({companyName:'SolDrashta',ownerName:'Aditya Pratap',ownerEmail:'adityapratap7391@gmail.com',timezone:'Asia/Kolkata'}),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- useEffect(()=>{if(localFile){setSetupChecking(false);return}let active=true;api('/setup').then(r=>{if(active)setSetup(r.required===true)}).catch(e=>{if(active)setError('Cannot reach the EnterpriseOS server. Start the application server and try again. '+e.message)}).finally(()=>{if(active)setSetupChecking(false)});return()=>{active=false}},[]);
- const loginFields:Field[]=[{key:'email',label:'Work email',type:'email',required:true},{key:'password',label:'Password',type:'password',required:true},{key:'otp',label:'Authenticator or recovery code',required:false,hint:'Required only if multi-factor authentication is enabled.'}];
- const setupFields:Field[]=[{key:'companyName',label:'Company name',required:true},{key:'ownerName',label:'Company owner name',required:true},{key:'ownerEmail',label:'Company owner email',type:'email',required:true},{key:'ownerPassword',label:'Company owner password',type:'password',required:true,hint:'At least 12 characters.'},{key:'platformEmail',label:'Platform administrator email',type:'email',required:true,hint:'Use a different account from the company owner.'},{key:'platformPassword',label:'Platform administrator password',type:'password',required:true,hint:'At least 12 characters.'},{key:'timezone',label:'Company timezone',required:true}];
- return <main className="auth-layout"><section className="auth-story"><a className="brand" href="#"><span className="brand-mark"><Icon name="dashboard" size={24}/></span><span>Enterprise<span className="brand-accent">OS</span><small>WORK, BEAUTIFULLY CONNECTED</small></span></a><div><span className="eyebrow">ONE CONNECTED WORKSPACE</span><h1>Your people.<br/>Your operations.<br/>A clearer workday.</h1><p>Manage your organization, projects, customers and business operations with one secure company workspace.</p><div className="auth-features"><span><Icon name="shield"/> Company data stays isolated</span><span><Icon name="briefcase"/> From onboarding to operations</span><span><Icon name="activity"/> Every important change, traceable</span></div></div><small>Secure access to your company workspace.</small></section><section className="auth-form-wrap"><button className="icon-button auth-appearance" onClick={onAppearance} aria-label="Open appearance settings"><Icon name="settings"/></button><div className="auth-card"><span className="auth-logo"><Icon name={setup?'building':'shield'} size={26}/></span><h2>{setup?'Set up your organization':'Welcome to EnterpriseOS'}</h2><p>{setup?'Create your company owner and platform administrator. This setup is available only while the database has no users.':'Sign in with your organization account to continue.'}</p>{(checking||setupChecking)&&<div className="scope-note" role="status">Checking your secure session...</div>}{message&&<div className="auth-success" role="status">{message}</div>}{error&&<div className="inline-error" role="alert">{error}</div>}{localFile&&<div className="inline-error" role="alert"><strong>Start the application server first.</strong><p>Run Start-EnterpriseOS.cmd from the project folder, then open <a href="http://localhost:5173">http://localhost:5173</a>. This page uses the real database and cannot sign in from a local file.</p></div>}<form onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{if(setup){if(String(values.ownerPassword||'').length<12||String(values.platformPassword||'').length<12)throw new Error('Both passwords must contain at least 12 characters.');if(String(values.ownerEmail).toLowerCase()===String(values.platformEmail).toLowerCase())throw new Error('The company owner and platform administrator need different email addresses.');await api('/setup','POST',values);setSetup(false);setValues({email:values.ownerEmail,password:''});setMessage('Organization created. Sign in with the company owner account.')}else await onLogin({email:values.email,password:values.password,otp:values.otp})}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}><fieldset disabled={busy||checking||setupChecking||localFile}><div className="form-grid">{(setup?setupFields:loginFields).map(field=><FieldInput key={field.key} field={field} value={values[field.key]} onChange={v=>setValues({...values,[field.key]:v})}/>)}</div><button className="button primary auth-submit" type="submit">{busy?'Please wait...':setup?'Create organization':'Sign in'}<Icon name="arrow" size={18}/></button></fieldset></form>{!setup&&!localFile&&<div className="auth-links"><button onClick={()=>onFlow('forgot')}>Forgot password?</button><button onClick={()=>onFlow('accept')}>Have an invitation?</button><button onClick={()=>onFlow('register')}>Register company</button></div>}<p className="auth-security"><Icon name="shield" size={14}/> Your server verifies every account and permission.</p>{error&&<Button icon="refresh" kind="ghost" onClick={()=>location.reload()}>Retry connection</Button>}</div></section></main>
+export function AuthGate({
+  checking,
+  onLogin,
+  onFlow,
+  onAppearance,
+}: {
+  checking: boolean;
+  onLogin: (v: { email: string; password: string; otp?: string }) => Promise<void>;
+  onFlow: (flow: string) => void;
+  onAppearance: () => void;
+}) {
+  const localFile = typeof location !== 'undefined' && location.protocol === 'file:';
+  const [setup, setSetup] = useState(false),
+    [setupChecking, setSetupChecking] = useState(true),
+    [values, setValues] = useState<Record<string, any>>({
+      companyName: 'SolDrashta',
+      ownerName: 'Aditya Pratap',
+      ownerEmail: 'adityapratap7391@gmail.com',
+      timezone: 'Asia/Kolkata',
+    }),
+    [error, setError] = useState(''),
+    [message, setMessage] = useState(''),
+    [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (localFile) {
+      setSetupChecking(false);
+      return;
+    }
+    let active = true;
+    api('/setup')
+      .then((r) => {
+        if (active) setSetup(r.required === true);
+      })
+      .catch((e) => {
+        if (active)
+          setError(
+            'Cannot reach the EnterpriseOS server. Start the application server and try again. ' +
+              e.message
+          );
+      })
+      .finally(() => {
+        if (active) setSetupChecking(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const loginFields: Field[] = [
+    { key: 'email', label: 'Work email', type: 'email', required: true },
+    { key: 'password', label: 'Password', type: 'password', required: true },
+    {
+      key: 'otp',
+      label: 'Authenticator or recovery code',
+      required: false,
+      hint: 'Required only if multi-factor authentication is enabled.',
+    },
+  ];
+  const setupFields: Field[] = [
+    { key: 'companyName', label: 'Company name', required: true },
+    { key: 'ownerName', label: 'Company owner name', required: true },
+    { key: 'ownerEmail', label: 'Company owner email', type: 'email', required: true },
+    {
+      key: 'ownerPassword',
+      label: 'Company owner password',
+      type: 'password',
+      required: true,
+      hint: 'At least 12 characters.',
+    },
+    {
+      key: 'platformEmail',
+      label: 'Platform administrator email',
+      type: 'email',
+      required: true,
+      hint: 'Use a different account from the company owner.',
+    },
+    {
+      key: 'platformPassword',
+      label: 'Platform administrator password',
+      type: 'password',
+      required: true,
+      hint: 'At least 12 characters.',
+    },
+    { key: 'timezone', label: 'Company timezone', required: true },
+  ];
+  return (
+    <main className="auth-layout">
+      <section className="auth-story">
+        <a className="brand" href="#">
+          <span className="brand-mark">
+            <Icon name="dashboard" size={24} />
+          </span>
+          <span>
+            Enterprise<span className="brand-accent">OS</span>
+            <small>WORK, BEAUTIFULLY CONNECTED</small>
+          </span>
+        </a>
+        <div>
+          <span className="eyebrow">ONE CONNECTED WORKSPACE</span>
+          <h1>
+            Your people.
+            <br />
+            Your operations.
+            <br />A clearer workday.
+          </h1>
+          <p>
+            Manage your organization, projects, customers and business operations with one secure
+            company workspace.
+          </p>
+          <div className="auth-features">
+            <span>
+              <Icon name="shield" /> Company data stays isolated
+            </span>
+            <span>
+              <Icon name="briefcase" /> From onboarding to operations
+            </span>
+            <span>
+              <Icon name="activity" /> Every important change, traceable
+            </span>
+          </div>
+        </div>
+        <small>Secure access to your company workspace.</small>
+      </section>
+      <section className="auth-form-wrap">
+        <button
+          className="icon-button auth-appearance"
+          onClick={onAppearance}
+          aria-label="Open appearance settings"
+        >
+          <Icon name="settings" />
+        </button>
+        <div className="auth-card">
+          <span className="auth-logo">
+            <Icon name={setup ? 'building' : 'shield'} size={26} />
+          </span>
+          <h2>{setup ? 'Set up your organization' : 'Welcome to EnterpriseOS'}</h2>
+          <p>
+            {setup
+              ? 'Create your company owner and platform administrator. This setup is available only while the database has no users.'
+              : 'Sign in with your organization account to continue.'}
+          </p>
+          {(checking || setupChecking) && (
+            <div className="scope-note" role="status">
+              Checking your secure session...
+            </div>
+          )}
+          {message && (
+            <div className="auth-success" role="status">
+              {message}
+            </div>
+          )}
+          {error && (
+            <div className="inline-error" role="alert">
+              {error}
+            </div>
+          )}
+          {localFile && (
+            <div className="inline-error" role="alert">
+              <strong>Start the application server first.</strong>
+              <p>
+                Run Start-EnterpriseOS.cmd from the project folder, then open{' '}
+                <a href="http://localhost:5173">http://localhost:5173</a>. This page uses the real
+                database and cannot sign in from a local file.
+              </p>
+            </div>
+          )}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError('');
+              try {
+                if (setup) {
+                  if (
+                    String(values.ownerPassword || '').length < 12 ||
+                    String(values.platformPassword || '').length < 12
+                  )
+                    throw new Error('Both passwords must contain at least 12 characters.');
+                  if (
+                    String(values.ownerEmail).toLowerCase() ===
+                    String(values.platformEmail).toLowerCase()
+                  )
+                    throw new Error(
+                      'The company owner and platform administrator need different email addresses.'
+                    );
+                  await api('/setup', 'POST', values);
+                  setSetup(false);
+                  setValues({ email: values.ownerEmail, password: '' });
+                  setMessage('Organization created. Sign in with the company owner account.');
+                } else
+                  await onLogin({
+                    email: values.email,
+                    password: values.password,
+                    otp: values.otp,
+                  });
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <fieldset disabled={busy || checking || setupChecking || localFile}>
+              <div className="form-grid">
+                {(setup ? setupFields : loginFields).map((field) => (
+                  <FieldInput
+                    key={field.key}
+                    field={field}
+                    value={values[field.key]}
+                    onChange={(v) => setValues({ ...values, [field.key]: v })}
+                  />
+                ))}
+              </div>
+              <button className="button primary auth-submit" type="submit">
+                {busy ? 'Please wait...' : setup ? 'Create organization' : 'Sign in'}
+                <Icon name="arrow" size={18} />
+              </button>
+            </fieldset>
+          </form>
+          {!setup && !localFile && (
+            <div className="auth-links">
+              <button onClick={() => onFlow('forgot')}>Forgot password?</button>
+              <button onClick={() => onFlow('accept')}>Have an invitation?</button>
+              <button onClick={() => onFlow('register')}>Register company</button>
+            </div>
+          )}
+          <p className="auth-security">
+            <Icon name="shield" size={14} /> Your server verifies every account and permission.
+          </p>
+          {error && (
+            <Button icon="refresh" kind="ghost" onClick={() => location.reload()}>
+              Retry connection
+            </Button>
+          )}
+        </div>
+      </section>
+    </main>
+  );
 }

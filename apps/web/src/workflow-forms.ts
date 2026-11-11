@@ -1,6 +1,73 @@
-import {Field} from './ui';
-export type WorkflowField={key:string;label:string;type:'TEXT'|'NUMBER'|'DATE'|'SELECT';required?:boolean;options?:string[];min?:number;max?:number;maxLength?:number};
-export function workflowInputs(schema:WorkflowField[]):Field[]{return schema.map(field=>({key:'form__'+field.key,label:field.label,type:field.type==='NUMBER'?'number':field.type==='DATE'?'date':field.type==='SELECT'?'select':'text',required:!!field.required,min:field.min,max:field.max,maxLength:field.maxLength,options:field.options?.map(value=>({value,label:value}))}));}
-export function workflowValues(schema:WorkflowField[],values:Record<string,any>):Record<string,any>{return Object.fromEntries(schema.flatMap(field=>{const value=values['form__'+field.key];if(value===undefined||value===null||value==='')return [];return [[field.key,field.type==='NUMBER'?Number(value):String(value)]]}));}
-export function workflowInitial(schema:WorkflowField[],values:Record<string,any>={}):Record<string,any>{return Object.fromEntries(schema.filter(field=>Object.hasOwn(values,field.key)).map(field=>['form__'+field.key,values[field.key]]));}
-export function normalizeFormEditor(rows:any[]):WorkflowField[]{return rows.map(row=>{const field:WorkflowField={key:String(row.key||'').trim(),label:String(row.label||'').trim(),type:row.type,required:row.required===true||row.required==='true'};if(row.type==='SELECT')field.options=String(row.optionsText||'').split('\n').map(v=>v.trim()).filter(Boolean);if(row.type==='TEXT')field.maxLength=Number(row.maxLength||500);if(row.type==='NUMBER'){if(row.min!==''&&row.min!=null)field.min=Number(row.min);if(row.max!==''&&row.max!=null)field.max=Number(row.max);}return field});}
+import { Field } from './ui';
+export type WorkflowField = {
+  key: string;
+  label: string;
+  type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT';
+  required?: boolean;
+  options?: string[];
+  min?: number;
+  max?: number;
+  maxLength?: number;
+};
+export function workflowInputs(schema: WorkflowField[]): Field[] {
+  return schema.map((field) => ({
+    key: 'form__' + field.key,
+    label: field.label,
+    type:
+      field.type === 'NUMBER'
+        ? 'number'
+        : field.type === 'DATE'
+          ? 'date'
+          : field.type === 'SELECT'
+            ? 'select'
+            : 'text',
+    required: !!field.required,
+    min: field.min,
+    max: field.max,
+    maxLength: field.maxLength,
+    options: field.options?.map((value) => ({ value, label: value })),
+  }));
+}
+export function workflowValues(
+  schema: WorkflowField[],
+  values: Record<string, any>
+): Record<string, any> {
+  return Object.fromEntries(
+    schema.flatMap((field) => {
+      const value = values['form__' + field.key];
+      if (value === undefined || value === null || value === '') return [];
+      return [[field.key, field.type === 'NUMBER' ? Number(value) : String(value)]];
+    })
+  );
+}
+export function workflowInitial(
+  schema: WorkflowField[],
+  values: Record<string, any> = {}
+): Record<string, any> {
+  return Object.fromEntries(
+    schema
+      .filter((field) => Object.hasOwn(values, field.key))
+      .map((field) => ['form__' + field.key, values[field.key]])
+  );
+}
+export function normalizeFormEditor(rows: any[]): WorkflowField[] {
+  return rows.map((row) => {
+    const field: WorkflowField = {
+      key: String(row.key || '').trim(),
+      label: String(row.label || '').trim(),
+      type: row.type,
+      required: row.required === true || row.required === 'true',
+    };
+    if (row.type === 'SELECT')
+      field.options = String(row.optionsText || '')
+        .split('\n')
+        .map((v) => v.trim())
+        .filter(Boolean);
+    if (row.type === 'TEXT') field.maxLength = Number(row.maxLength || 500);
+    if (row.type === 'NUMBER') {
+      if (row.min !== '' && row.min != null) field.min = Number(row.min);
+      if (row.max !== '' && row.max != null) field.max = Number(row.max);
+    }
+    return field;
+  });
+}

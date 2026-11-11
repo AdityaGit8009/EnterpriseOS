@@ -1,12 +1,107 @@
-const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
-const web=path.resolve(__dirname,'../apps/web'),ts=require(path.join(web,'node_modules/typescript')),React=require(path.join(web,'node_modules/react')),{renderToString}=require(path.join(web,'node_modules/react-dom/server'));
-const compile=(module,filename)=>module._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);
-require.extensions['.ts']=compile;require.extensions['.tsx']=compile;
-global.localStorage={getItem:()=>null,setItem(){},removeItem(){}};global.location={hash:'',protocol:'http:'};
-const App=require(path.join(web,'src/App.tsx')).default,{emptySnapshot}=require(path.join(web,'src/data.ts'));
-const principal={userId:'test-user',tenantId:'test-tenant',name:'Test Owner',email:'owner@example.test',role:'ADMIN'};
-test('unauthenticated entry is real sign-in without accessible business data',()=>{const html=renderToString(React.createElement(App));assert.match(html,/Welcome to EnterpriseOS/);assert.match(html,/Work email/);assert.match(html,/Authenticator or recovery code/);assert.match(html,/Register company/);assert.ok(!html.includes('Demo mode'));assert.ok(!html.includes('Acme Studio'));assert.ok(!html.includes('Preview as'));assert.ok(!html.includes('Company tenants'))});
-for(const [page,heading] of [['dashboard','Welcome back'],['employees','Employee'],['attendance','Attendance'],['leave','Leave'],['requests','Employee requests'],['projects','Kanban'],['users','Users'],['organization','Company'],['audit','activity'],['settings','Color palette'],['account','Account'],['crm','Customers'],['inventory','Inventory'],['procurement','Procurement'],['finance','Finance'],['payroll','Payroll'],['workflows','Approvals'],['documents','Documents'],['notifications','Notifications'],['reports','Reports'],['integrations','Integrations'],['subscriptions','Plans']])test('authenticated empty-state render: '+page,()=>{location.hash='#'+page;const html=renderToString(React.createElement(App,{initialPrincipal:principal,initialSnapshot:emptySnapshot()}));assert.ok(html.includes('EnterpriseOS')||html.includes('Enterprise'));assert.ok(html.toLowerCase().includes(heading.toLowerCase()),'Expected page '+page);assert.ok(!html.includes('Demo mode'));assert.ok(!html.includes('Sample workspace'));assert.ok(html.includes('Open appearance settings'))});
-for(const page of ['subscriptions','operations'])test('platform-only page: '+page,()=>{location.hash='#'+page;const html=renderToString(React.createElement(App,{initialPrincipal:{...principal,tenantId:'',role:'PLATFORM_ADMIN'},initialSnapshot:emptySnapshot()}));assert.ok(html.includes('PLATFORM ADMINISTRATION'));assert.ok(html.includes('Operations &amp; governance'))});
-test('ten palettes and light/dark controls remain available',()=>{location.hash='#settings';const html=renderToString(React.createElement(App,{initialPrincipal:principal,initialSnapshot:emptySnapshot()}));assert.equal((html.match(/class="palette-swatch /g)||[]).length,10);assert.match(html,/Light/);assert.match(html,/Dark/)});
-test('standalone file explains the actual server launch',()=>{location.protocol='file:';const html=renderToString(React.createElement(App));assert.match(html,/Start-EnterpriseOS.cmd/);assert.match(html,/http:\/\/localhost:5173/);location.protocol='http:'});
+const test = require('node:test'),
+  assert = require('node:assert/strict'),
+  path = require('node:path'),
+  fs = require('node:fs');
+const web = path.resolve(__dirname, '../apps/web'),
+  ts = require(path.join(web, 'node_modules/typescript')),
+  React = require(path.join(web, 'node_modules/react')),
+  { renderToString } = require(path.join(web, 'node_modules/react-dom/server'));
+const compile = (module, filename) =>
+  module._compile(
+    ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
+        target: ts.ScriptTarget.ES2022,
+        esModuleInterop: true,
+      },
+    }).outputText,
+    filename
+  );
+require.extensions['.ts'] = compile;
+require.extensions['.tsx'] = compile;
+global.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+global.location = { hash: '', protocol: 'http:' };
+const App = require(path.join(web, 'src/App.tsx')).default,
+  { emptySnapshot } = require(path.join(web, 'src/data.ts'));
+const principal = {
+  userId: 'test-user',
+  tenantId: 'test-tenant',
+  name: 'Test Owner',
+  email: 'owner@example.test',
+  role: 'ADMIN',
+};
+test('unauthenticated entry is real sign-in without accessible business data', () => {
+  const html = renderToString(React.createElement(App));
+  assert.match(html, /Welcome to EnterpriseOS/);
+  assert.match(html, /Work email/);
+  assert.match(html, /Authenticator or recovery code/);
+  assert.match(html, /Register company/);
+  assert.ok(!html.includes('Demo mode'));
+  assert.ok(!html.includes('Acme Studio'));
+  assert.ok(!html.includes('Preview as'));
+  assert.ok(!html.includes('Company tenants'));
+});
+for (const [page, heading] of [
+  ['dashboard', 'Welcome back'],
+  ['employees', 'Employee'],
+  ['attendance', 'Attendance'],
+  ['leave', 'Leave'],
+  ['requests', 'Employee requests'],
+  ['projects', 'Kanban'],
+  ['users', 'Users'],
+  ['organization', 'Company'],
+  ['audit', 'activity'],
+  ['settings', 'Color palette'],
+  ['account', 'Account'],
+  ['crm', 'Customers'],
+  ['inventory', 'Inventory'],
+  ['procurement', 'Procurement'],
+  ['finance', 'Finance'],
+  ['payroll', 'Payroll'],
+  ['workflows', 'Approvals'],
+  ['documents', 'Documents'],
+  ['notifications', 'Notifications'],
+  ['reports', 'Reports'],
+  ['integrations', 'Integrations'],
+  ['subscriptions', 'Plans'],
+])
+  test('authenticated empty-state render: ' + page, () => {
+    location.hash = '#' + page;
+    const html = renderToString(
+      React.createElement(App, { initialPrincipal: principal, initialSnapshot: emptySnapshot() })
+    );
+    assert.ok(html.includes('EnterpriseOS') || html.includes('Enterprise'));
+    assert.ok(html.toLowerCase().includes(heading.toLowerCase()), 'Expected page ' + page);
+    assert.ok(!html.includes('Demo mode'));
+    assert.ok(!html.includes('Sample workspace'));
+    assert.ok(html.includes('Open appearance settings'));
+  });
+for (const page of ['subscriptions', 'operations'])
+  test('platform-only page: ' + page, () => {
+    location.hash = '#' + page;
+    const html = renderToString(
+      React.createElement(App, {
+        initialPrincipal: { ...principal, tenantId: '', role: 'PLATFORM_ADMIN' },
+        initialSnapshot: emptySnapshot(),
+      })
+    );
+    assert.ok(html.includes('PLATFORM ADMINISTRATION'));
+    assert.ok(html.includes('Operations &amp; governance'));
+  });
+test('ten palettes and light/dark controls remain available', () => {
+  location.hash = '#settings';
+  const html = renderToString(
+    React.createElement(App, { initialPrincipal: principal, initialSnapshot: emptySnapshot() })
+  );
+  assert.equal((html.match(/class="palette-swatch /g) || []).length, 10);
+  assert.match(html, /Light/);
+  assert.match(html, /Dark/);
+});
+test('standalone file explains the actual server launch', () => {
+  location.protocol = 'file:';
+  const html = renderToString(React.createElement(App));
+  assert.match(html, /Start-EnterpriseOS.cmd/);
+  assert.match(html, /http:\/\/localhost:5173/);
+  location.protocol = 'http:';
+});

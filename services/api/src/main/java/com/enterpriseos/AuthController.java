@@ -30,7 +30,10 @@ public class AuthController {
     private final PasswordPolicyService passwordPolicy;
     private final AuthenticationEvents authenticationEvents;
     private final TransactionTemplate loginTransactions;
-    private record LoginResult(Principal principal,String token) {}
+
+    private record LoginResult(Principal principal, String token) {
+    }
+
     private final boolean secure;
     private final int sessionHours;
     private final String baseUrl;
@@ -61,26 +64,41 @@ public class AuthController {
     }
 
     @PostMapping("/auth/login")
-    public Principal login(@RequestBody Map<String,Object> body,HttpServletRequest request,HttpServletResponse response) {
-        String email=Inputs.email(body,"email");Object value=body.get("password");
-        if(!(value instanceof String password)||password.length()>256)throw new ApiException(400,"Enter your password.");
-        String key=Tokens.hash(email+"|"+request.getRemoteAddr());
-        try { limit(key,8); } catch(ApiException ex) { authenticationEvents.record(email,request.getRemoteAddr(),"THROTTLED");throw ex; }
-        String[] outcome={"FAILED"};LoginResult result;
+    public Principal login(@RequestBody Map<String, Object> body, HttpServletRequest request,
+            HttpServletResponse response) {
+        String email = Inputs.email(body, "email");
+        Object value = body.get("password");
+        if (!(value instanceof String password) || password.length() > 256)
+            throw new ApiException(400, "Enter your password.");
+        String key = Tokens.hash(email + "|" + request.getRemoteAddr());
         try {
-            result=loginTransactions.execute(status->authenticate(body,request,email,password,outcome));
-        } catch(ApiException ex) {
-            // This executes after authentication rollback/connection release, never as a nested pool borrower.
-            authenticationEvents.record(email,request.getRemoteAddr(),outcome[0]);throw ex;
+            limit(key, 8);
+        } catch (ApiException ex) {
+            authenticationEvents.record(email, request.getRemoteAddr(), "THROTTLED");
+            throw ex;
         }
-        if(result==null)throw new IllegalStateException("Authentication did not produce a session");
+        String[] outcome = { "FAILED" };
+        LoginResult result;
+        try {
+            result = loginTransactions.execute(status -> authenticate(body, request, email, password, outcome));
+        } catch (ApiException ex) {
+            // This executes after authentication rollback/connection release, never as a
+            // nested pool borrower.
+            authenticationEvents.record(email, request.getRemoteAddr(), outcome[0]);
+            throw ex;
+        }
+        if (result == null)
+            throw new IllegalStateException("Authentication did not produce a session");
         attempts.remove(key);
-        authenticationEvents.record(email,request.getRemoteAddr(),"SUCCESS");
-        // No cookie is issued until authentication and its audit transaction have committed.
-        cookie(response,result.token(),Duration.ofHours(sessionHours));
+        authenticationEvents.record(email, request.getRemoteAddr(), "SUCCESS");
+        // No cookie is issued until authentication and its audit transaction have
+        // committed.
+        cookie(response, result.token(), Duration.ofHours(sessionHours));
         return result.principal();
     }
-    private LoginResult authenticate(Map<String,Object> body,HttpServletRequest request,String email,String password,String[] outcome) {
+
+    private LoginResult authenticate(Map<String, Object> body, HttpServletRequest request, String email,
+            String password, String[] outcome) {
         var users = jdbc.queryForList("SELECT * FROM users WHERE email=? FOR UPDATE", email);
         String stored = users.isEmpty() ? dummyHash : users.getFirst().get("password_hash").toString();
         boolean valid = passwords.matches(password, stored);
@@ -125,7 +143,7 @@ public class AuthController {
         jdbc.update("UPDATE sessions SET user_agent=?,client_ip_hash=? WHERE token_hash=?", agent,
                 Tokens.hash(request.getRemoteAddr()), Tokens.hash(token));
         audit.log(principal, "AUTH_LOGIN", "session", userId);
-        return new LoginResult(principal,token);
+        return new LoginResult(principal, token);
     }
 
     @PostMapping("/auth/logout")
@@ -286,58 +304,72 @@ public class AuthController {
         passwordPolicy.enforceAndRemember(userId, password,
                 jdbc.queryForObject("SELECT password_hash FROM users WHERE id=? FOR UPDATE", String.class, userId));
         jdbc.update("UPDATE users SET password_hash=? WHERE id=?", passwords.encode(password), userId);
-        jdbc.update("UPDATE password_reset_tokens SET used_at=UTC_TIMESTAMP(6) WHERE user_id=? AND used_at IS NULL", userId);
+        jdbc.update("UPDATE password_reset_tokens SET used_at=UTC_TIMESTAMP(6) WHERE user_id=? AND used_at IS NULL",
+                userId);
         jdbc.update("UPDATE sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL", userId);
-        audit.log(new Principal(userId, null, token.get("name").toString(), token.get("email").toString(), "MEMBER"), "PASSWORD_RESET", "user", userId);
+        audit.log(new Principal(userId, null, token.get("name").toString(), token.get("email").toString(), "MEMBER"),
+                "PASSWORD_RESET", "user", userId);
         return Map.of("message", "Password reset. Sign in with your new password.");
     }
+
     @PostMapping("/invitations/accept")
-                
+
     @Transactional
-    public Map<String,Object> accept(@RequestBody Map<String,Object> body) {
-                
-        String raw = Inputs.text(body, "token", 256), name = Inputs.text(body, "name", 180), password = Inputs.password(body);
-        var invites = jdbc.queryForList("SELECT i.* FROM invitations i JOIN tenants t ON t.id=i.tenant_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.expires_at>UTC_TIMESTAMP(6) AND t.status='ACTIVE' FOR UPDATE", Tokens.hash(raw));
-        if (invites.isEmpty()) throw new ApiException(400, "Invitation is invalid, expired or already used.");
-        var invite = invites.getFirst(); String email = invite.get("email").toString(), tenantId = invite.get("tenant_id").toString();
+    public Map<String, Object> accept(@RequestBody Map<String, Object> body) {
+
+        String raw = Inputs.text(body, "token", 256), name = Inputs.text(body, "name", 180),
+                password = Inputs.password(body);
+        var invites = jdbc.queryForList(
+                "SELECT i.* FROM invitations i JOIN tenants t ON t.id=i.tenant_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.expires_at>UTC_TIMESTAMP(6) AND t.status='ACTIVE' FOR UPDATE",
+                Tokens.hash(raw));
+        if (invites.isEmpty())
+            throw new ApiException(400, "Invitation is invalid, expired or already used.");
+        var invite = invites.getFirst();
+        String email = invite.get("email").toString(), tenantId = invite.get("tenant_id").toString();
         entitlements.checkSeat(tenantId);
         var existing = jdbc.queryForList("SELECT * FROM users WHERE email=? FOR UPDATE", email);
         String userId;
-                
-                
+
         if (existing.isEmpty()) {
             userId = UUID.randomUUID().toString();
-            jdbc.update("INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES (?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))", userId, name, email, passwords.encode(password));
+            jdbc.update(
+                    "INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES (?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))",
+                    userId, name, email, passwords.encode(password));
         } else {
             var user = existing.getFirst();
-            if (!"ACTIVE".equals(user.get("status")) || user.get("platform_role") != null || !passwords.matches(password, user.get("password_hash").toString()))
-                throw new ApiException(403, "An existing account must use its current password. Use password reset if needed.");
+            if (!"ACTIVE".equals(user.get("status")) || user.get("platform_role") != null
+                    || !passwords.matches(password, user.get("password_hash").toString()))
+                throw new ApiException(403,
+                        "An existing account must use its current password. Use password reset if needed.");
             userId = user.get("id").toString();
-                    
+
         }
-        if (jdbc.queryForObject("SELECT COUNT(*) FROM memberships WHERE tenant_id=? AND user_id=?", Integer.class, tenantId, userId) > 0)
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM memberships WHERE tenant_id=? AND user_id=?", Integer.class,
+                tenantId, userId) > 0)
             throw new ApiException(409, "This user already has an organization membership.");
-        jdbc.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES (?,?,?,?,'ACTIVE')", UUID.randomUUID().toString(), tenantId, userId, invite.get("role"));
+        jdbc.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES (?,?,?,?,'ACTIVE')",
+                UUID.randomUUID().toString(), tenantId, userId, invite.get("role"));
         jdbc.update("UPDATE invitations SET accepted_at=UTC_TIMESTAMP(6) WHERE id=?", invite.get("id"));
-        audit.log(new Principal(userId, tenantId, name, email, invite.get("role").toString()), "INVITATION_ACCEPTED", "invitation", invite.get("id").toString());
+        audit.log(new Principal(userId, tenantId, name, email, invite.get("role").toString()), "INVITATION_ACCEPTED",
+                "invitation", invite.get("id").toString());
         return Map.of("message", "Account activated. Sign in to continue.");
-                
+
     }
+
     private void cookie(HttpServletResponse response, String token, Duration duration) {
-                
-        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("EOS_SESSION", token).httpOnly(true).secure(secure).sameSite("Lax").path("/").maxAge(duration).build().toString());
+
+        response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("EOS_SESSION", token).httpOnly(true)
+                .secure(secure).sameSite("Lax").path("/").maxAge(duration).build().toString());
     }
-                
+
     private void limit(String key, int max) {
         long now = System.currentTimeMillis();
-        if (attempts.size() > 10000) attempts.entrySet().removeIf(e -> e.getValue().until < now);
-        Attempts current = attempts.compute(key, (k, previous) -> previous == null || previous.until < now 
-                ? new Attempts(1, now + 15 * 60_000L) : new Attempts(previous.count + 1, previous.until));
-        if (current.count > max) throw new ApiException(429, "Too many attempts. Try again after 15 minutes.");
+        if (attempts.size() > 10000)
+            attempts.entrySet().removeIf(e -> e.getValue().until < now);
+        Attempts current = attempts.compute(key,
+                (k, previous) -> previous == null || previous.until < now ? new Attempts(1, now + 15 * 60_000L)
+                        : new Attempts(previous.count + 1, previous.until));
+        if (current.count > max)
+            throw new ApiException(429, "Too many attempts. Try again after 15 minutes.");
     }
 }
-
-            
-                
-                        
-            

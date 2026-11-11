@@ -7,24 +7,276 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-@RestController @RequestMapping("/api/v1")
+@RestController
+@RequestMapping("/api/v1")
 public class IntegrationController {
-    private final AutomationSupport s;private final WebhookDeliveryService dispatcher;private final ReportService reports;private final SecretCipher secrets;
-    private final ConcurrentHashMap<String,long[]> rate=new ConcurrentHashMap<>();
-    public IntegrationController(AutomationSupport s,WebhookDeliveryService dispatcher,ReportService reports,SecretCipher secrets){this.s=s;this.dispatcher=dispatcher;this.reports=reports;this.secrets=secrets;}
-    @GetMapping("/org/integrations/webhooks") public List<Map<String,Object>> endpoints(@RequestAttribute Principal principal){s.allow(principal,"ADMIN");return s.db.queryForList("SELECT id,name,url,status,direction,events,created_at AS createdAt FROM webhook_endpoints WHERE tenant_id=? ORDER BY created_at DESC",principal.tenantId()).stream().map(row->{row.put("events",array(row.get("events")));return row;}).toList();}
-    @PostMapping("/org/integrations/webhooks") @Transactional public Map<String,Object> endpoint(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);String id=s.id(),direction=Inputs.optional(body,"direction",20,"OUTBOUND"),name=Inputs.text(body,"name",180);if(!Set.of("INBOUND","OUTBOUND").contains(direction))throw new ApiException(400,"Webhook direction must be INBOUND or OUTBOUND.");String url=direction.equals("INBOUND")?"/api/v1/integrations/webhooks/"+id:dispatcher.destination(Inputs.text(body,"url",1000)).toString();Object events=body.getOrDefault("events",List.of("*"));if(!(events instanceof List<?> list)||list.isEmpty()||list.size()>50||list.stream().anyMatch(e->!(e instanceof String text)||!text.matches("[A-Z0-9_*]{1,100}")))throw new ApiException(400,"Choose event codes or *.");String secret=Tokens.issue();s.db.update("INSERT INTO webhook_endpoints(id,tenant_id,name,url,secret,events,direction) VALUES (?,?,?,?,?,?,?)",id,principal.tenantId(),name,url,secrets.encrypt(secret),s.encode(events),direction);s.audit.log(principal,"WEBHOOK_REGISTERED","webhook",id);return Map.of("id",id,"name",name,"url",url,"direction",direction,"secret",secret,"message","Copy this signing secret now. It is not returned by list endpoints.");}
-    @PostMapping("/org/integrations/webhooks/{id}/rotate") @Transactional public Map<String,Object> rotate(@RequestAttribute Principal principal,@PathVariable String id){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);String secret=Tokens.issue();if(s.db.update("UPDATE webhook_endpoints SET secret=? WHERE tenant_id=? AND id=?",secrets.encrypt(secret),principal.tenantId(),id)==0)throw new ApiException(404,"Webhook endpoint not found.");s.audit.log(principal,"WEBHOOK_SECRET_ROTATED","webhook",id);return Map.of("id",id,"secret",secret);}
-    @PatchMapping("/org/integrations/webhooks/{id}/status") @Transactional public Map<String,Object> status(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);String status=Inputs.text(body,"status",20);if(!Set.of("ACTIVE","INACTIVE").contains(status))throw new ApiException(400,"Status must be ACTIVE or INACTIVE.");if(s.db.update("UPDATE webhook_endpoints SET status=? WHERE tenant_id=? AND id=?",status,principal.tenantId(),id)==0)throw new ApiException(404,"Webhook endpoint not found.");s.audit.log(principal,"WEBHOOK_STATUS_CHANGED","webhook",id);return Map.of("id",id,"status",status);}
-    @GetMapping("/org/integrations/deliveries") public List<Map<String,Object>> deliveries(@RequestAttribute Principal principal){s.allow(principal,"ADMIN","AUDITOR");return s.db.queryForList("SELECT id,endpoint_id AS endpointId,event_id AS eventId,event_type AS eventType,status,attempts,response_code AS responseCode,next_attempt_at AS nextAttemptAt,created_at AS createdAt,delivered_at AS deliveredAt FROM webhook_deliveries WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",principal.tenantId());}
-    @PostMapping("/org/integrations/deliveries/{id}/retry") @Transactional public Map<String,Object> retry(@RequestAttribute Principal principal,@PathVariable String id){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);if(s.db.update("UPDATE webhook_deliveries SET status='PENDING',attempts=0,next_attempt_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND id=? AND status='FAILED'",principal.tenantId(),id)==0)throw new ApiException(409,"Only failed tenant deliveries can be retried.");s.audit.log(principal,"WEBHOOK_RETRY_REQUESTED","webhookDelivery",id);return Map.of("id",id,"status","PENDING");}
-    @PostMapping("/integrations/webhooks/{id}") @Transactional public Map<String,Object> receive(@PathVariable String id,@RequestHeader(value="X-EOS-Timestamp",required=false)String timestamp,@RequestHeader(value="X-EOS-Event-Id",required=false)String eventId,@RequestHeader(value="X-EOS-Signature",required=false)String signature,@RequestBody byte[] payload){if(payload.length>32768||timestamp==null||!timestamp.matches("[0-9]{10,12}")||eventId==null||!eventId.matches("[A-Za-z0-9_-]{1,100}"))throw new ApiException(403,"Signed webhook headers are invalid.");long value;try{value=Long.parseLong(timestamp);}catch(Exception ex){throw new ApiException(403,"Webhook timestamp is invalid.");}long now=Instant.now().getEpochSecond();if(value<now-300||value>now+300)throw new ApiException(403,"Webhook timestamp has expired.");var row=s.first(s.db.queryForList("SELECT e.* FROM webhook_endpoints e JOIN tenants t ON t.id=e.tenant_id WHERE e.id=? AND e.direction='INBOUND' AND e.status='ACTIVE' AND t.status='ACTIVE' FOR UPDATE",id),"Webhook endpoint");if(!WebhookDeliveryService.valid(secrets.decrypt(row.get("secret").toString()),timestamp,payload,signature))throw new ApiException(403,"Webhook signature is invalid.");Map<String,Object> data;try{data=s.json.readValue(payload,new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String,Object>>(){});}catch(Exception ex){throw new ApiException(400,"Webhook payload must be a JSON metadata object.");}if(!Set.of("id","type","entity","entityId","occurredAt").containsAll(data.keySet()))throw new ApiException(400,"This connector accepts event metadata only; vendor-specific business fields require an approved mapping.");if(data.get("id")!=null&&!eventId.equals(data.get("id")))throw new ApiException(400,"Event ID does not match the signed payload.");String tenant=row.get("tenant_id").toString();var sub=s.entitlements.subscription(tenant);if(!sub.isEmpty())s.entitlements.writable(sub);if(s.db.queryForObject("SELECT COUNT(*) FROM integration_inbound_events WHERE endpoint_id=? AND event_id=?",Integer.class,id,eventId)>0)throw new ApiException(409,"Webhook event was already received.");s.db.update("INSERT INTO integration_inbound_events(id,tenant_id,endpoint_id,event_id,payload,payload_hash) VALUES (?,?,?,?,?,?)",s.id(),tenant,id,eventId,new String(payload,StandardCharsets.UTF_8),Tokens.hash(new String(payload,StandardCharsets.UTF_8)));return Map.of("eventId",eventId,"status","ACCEPTED");}
-    @GetMapping("/org/integrations/inbound-events") public List<Map<String,Object>> inbound(@RequestAttribute Principal principal){s.allow(principal,"ADMIN","AUDITOR");return s.db.queryForList("SELECT id,endpoint_id AS endpointId,event_id AS eventId,payload_hash AS payloadHash,received_at AS receivedAt FROM integration_inbound_events WHERE tenant_id=? ORDER BY received_at DESC LIMIT 200",principal.tenantId());}
-    @GetMapping("/org/integrations/credentials") public List<Map<String,Object>> credentials(@RequestAttribute Principal principal){s.allow(principal,"ADMIN");return s.db.queryForList("SELECT id,name,scopes,expires_at AS expiresAt,revoked_at AS revokedAt,created_at AS createdAt FROM api_credentials WHERE tenant_id=? ORDER BY created_at DESC",principal.tenantId()).stream().map(row->{row.put("scopes",array(row.get("scopes")));return row;}).toList();}
-    @PostMapping("/org/integrations/credentials") @Transactional public Map<String,Object> credential(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);String id=s.id(),token=Tokens.issue(),name=Inputs.text(body,"name",180);Object scopes=body.get("scopes");if(!(scopes instanceof List<?> list)||list.isEmpty()||list.stream().anyMatch(v->!Set.of("employees:read","projects:read","inventory:read","invoices:read").contains(v)))throw new ApiException(400,"Choose read scopes for employees, projects, inventory or invoices.");int days=s.integer(body,"expiresInDays",30,1,365);s.db.update("INSERT INTO api_credentials(id,tenant_id,name,token_hash,scopes,created_by,expires_at) VALUES (?,?,?,?,?,?,TIMESTAMPADD(DAY,?,UTC_TIMESTAMP(6)))",id,principal.tenantId(),name,Tokens.hash(token),s.encode(scopes),principal.userId(),days);s.audit.log(principal,"API_CREDENTIAL_CREATED","apiCredential",id);return Map.of("id",id,"name",name,"token",token,"scopes",scopes,"message","Copy the bearer token now. Only its hash is stored.");}
-    @PostMapping("/org/integrations/credentials/{id}/revoke") @Transactional public Map<String,Object> revoke(@RequestAttribute Principal principal,@PathVariable String id){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);if(s.db.update("UPDATE api_credentials SET revoked_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND id=? AND revoked_at IS NULL",principal.tenantId(),id)==0)throw new ApiException(404,"Active credential not found.");s.audit.log(principal,"API_CREDENTIAL_REVOKED","apiCredential",id);return Map.of("id",id,"revoked",true);}
-    @PostMapping("/org/integrations/credentials/{id}/rotate") @Transactional public Map<String,Object> rotateCredential(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"INTEGRATIONS",false);int days=s.integer(body,"expiresInDays",30,1,365);String token=Tokens.issue();if(s.db.update("UPDATE api_credentials SET token_hash=?,expires_at=TIMESTAMPADD(DAY,?,UTC_TIMESTAMP(6)) WHERE tenant_id=? AND id=? AND revoked_at IS NULL",Tokens.hash(token),days,principal.tenantId(),id)==0)throw new ApiException(404,"Active credential not found.");s.audit.log(principal,"API_CREDENTIAL_ROTATED","apiCredential",id);return Map.of("id",id,"token",token,"message","The old bearer token is invalid immediately. Copy the new token now.");}
-    @GetMapping("/integrations/data/{kind}") public Map<String,Object> data(@PathVariable String kind,@RequestHeader(value="Authorization",required=false)String authorization){if(authorization==null||!authorization.startsWith("Bearer ")||authorization.length()>256)throw new ApiException(401,"A valid scoped bearer credential is required.");String token=authorization.substring(7);var rows=s.db.queryForList("SELECT c.*,u.name AS owner_name,u.email,m.role FROM api_credentials c JOIN tenants t ON t.id=c.tenant_id JOIN users u ON u.id=c.created_by JOIN memberships m ON m.user_id=c.created_by AND m.tenant_id=c.tenant_id WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>UTC_TIMESTAMP(6) AND t.status='ACTIVE' AND m.status='ACTIVE' AND u.status='ACTIVE'",Tokens.hash(token));if(rows.isEmpty())throw new ApiException(401,"Integration credential is invalid, revoked or expired.");var credential=rows.getFirst();rate(credential.get("id").toString());if(!Set.of("employees","projects","inventory","invoices").contains(kind)||!array(credential.get("scopes")).contains(kind+":read"))throw new ApiException(403,"This credential does not include the requested read scope.");Principal owner=new Principal(credential.get("created_by").toString(),credential.get("tenant_id").toString(),credential.get("owner_name").toString(),credential.get("email").toString(),credential.get("role").toString());s.entitlements.require(owner,"INTEGRATIONS",false);List<String> columns=kind.equals("employees")?List.of("id","name","employeeCode","status","departmentId","joinDate"):kind.equals("projects")?List.of("id","name","status","ownerId"):List.of("id","name","sku","status","total","currency");var records=reports.rows(owner,kind,Map.of()).stream().map(row->{Map<String,Object> projected=new LinkedHashMap<>();for(String column:columns)if(row.containsKey(column))projected.put(column,row.get(column));return projected;}).toList();return Map.of("kind",kind,"records",records);}
-    private List<?> array(Object value){try{return s.json.readValue(value.toString(),List.class);}catch(Exception ex){throw new IllegalStateException(ex);}}
-    private void rate(String id){long now=System.currentTimeMillis();if(rate.size()>10000)rate.entrySet().removeIf(e->e.getValue()[1]<now);long[] value=rate.compute(id,(k,old)->old==null||old[1]<now?new long[]{1,now+60000}:new long[]{old[0]+1,old[1]});if(value[0]>60)throw new ApiException(429,"Integration limit is 60 reads per minute per credential.");}
+    private final AutomationSupport s;
+    private final WebhookDeliveryService dispatcher;
+    private final ReportService reports;
+    private final SecretCipher secrets;
+    private final ConcurrentHashMap<String, long[]> rate = new ConcurrentHashMap<>();
+
+    public IntegrationController(AutomationSupport s, WebhookDeliveryService dispatcher, ReportService reports,
+            SecretCipher secrets) {
+        this.s = s;
+        this.dispatcher = dispatcher;
+        this.reports = reports;
+        this.secrets = secrets;
+    }
+
+    @GetMapping("/org/integrations/webhooks")
+    public List<Map<String, Object>> endpoints(@RequestAttribute Principal principal) {
+        s.allow(principal, "ADMIN");
+        return s.db.queryForList(
+                "SELECT id,name,url,status,direction,events,created_at AS createdAt FROM webhook_endpoints WHERE tenant_id=? ORDER BY created_at DESC",
+                principal.tenantId()).stream().map(row -> {
+                    row.put("events", array(row.get("events")));
+                    return row;
+                }).toList();
+    }
+
+    @PostMapping("/org/integrations/webhooks")
+    @Transactional
+    public Map<String, Object> endpoint(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        String id = s.id(), direction = Inputs.optional(body, "direction", 20, "OUTBOUND"),
+                name = Inputs.text(body, "name", 180);
+        if (!Set.of("INBOUND", "OUTBOUND").contains(direction))
+            throw new ApiException(400, "Webhook direction must be INBOUND or OUTBOUND.");
+        String url = direction.equals("INBOUND") ? "/api/v1/integrations/webhooks/" + id
+                : dispatcher.destination(Inputs.text(body, "url", 1000)).toString();
+        Object events = body.getOrDefault("events", List.of("*"));
+        if (!(events instanceof List<?> list) || list.isEmpty() || list.size() > 50
+                || list.stream().anyMatch(e -> !(e instanceof String text) || !text.matches("[A-Z0-9_*]{1,100}")))
+            throw new ApiException(400, "Choose event codes or *.");
+        String secret = Tokens.issue();
+        s.db.update(
+                "INSERT INTO webhook_endpoints(id,tenant_id,name,url,secret,events,direction) VALUES (?,?,?,?,?,?,?)",
+                id, principal.tenantId(), name, url, secrets.encrypt(secret), s.encode(events), direction);
+        s.audit.log(principal, "WEBHOOK_REGISTERED", "webhook", id);
+        return Map.of("id", id, "name", name, "url", url, "direction", direction, "secret", secret, "message",
+                "Copy this signing secret now. It is not returned by list endpoints.");
+    }
+
+    @PostMapping("/org/integrations/webhooks/{id}/rotate")
+    @Transactional
+    public Map<String, Object> rotate(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        String secret = Tokens.issue();
+        if (s.db.update("UPDATE webhook_endpoints SET secret=? WHERE tenant_id=? AND id=?", secrets.encrypt(secret),
+                principal.tenantId(), id) == 0)
+            throw new ApiException(404, "Webhook endpoint not found.");
+        s.audit.log(principal, "WEBHOOK_SECRET_ROTATED", "webhook", id);
+        return Map.of("id", id, "secret", secret);
+    }
+
+    @PatchMapping("/org/integrations/webhooks/{id}/status")
+    @Transactional
+    public Map<String, Object> status(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        String status = Inputs.text(body, "status", 20);
+        if (!Set.of("ACTIVE", "INACTIVE").contains(status))
+            throw new ApiException(400, "Status must be ACTIVE or INACTIVE.");
+        if (s.db.update("UPDATE webhook_endpoints SET status=? WHERE tenant_id=? AND id=?", status,
+                principal.tenantId(), id) == 0)
+            throw new ApiException(404, "Webhook endpoint not found.");
+        s.audit.log(principal, "WEBHOOK_STATUS_CHANGED", "webhook", id);
+        return Map.of("id", id, "status", status);
+    }
+
+    @GetMapping("/org/integrations/deliveries")
+    public List<Map<String, Object>> deliveries(@RequestAttribute Principal principal) {
+        s.allow(principal, "ADMIN", "AUDITOR");
+        return s.db.queryForList(
+                "SELECT id,endpoint_id AS endpointId,event_id AS eventId,event_type AS eventType,status,attempts,response_code AS responseCode,next_attempt_at AS nextAttemptAt,created_at AS createdAt,delivered_at AS deliveredAt FROM webhook_deliveries WHERE tenant_id=? ORDER BY created_at DESC LIMIT 200",
+                principal.tenantId());
+    }
+
+    @PostMapping("/org/integrations/deliveries/{id}/retry")
+    @Transactional
+    public Map<String, Object> retry(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        if (s.db.update(
+                "UPDATE webhook_deliveries SET status='PENDING',attempts=0,next_attempt_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND id=? AND status='FAILED'",
+                principal.tenantId(), id) == 0)
+            throw new ApiException(409, "Only failed tenant deliveries can be retried.");
+        s.audit.log(principal, "WEBHOOK_RETRY_REQUESTED", "webhookDelivery", id);
+        return Map.of("id", id, "status", "PENDING");
+    }
+
+    @PostMapping("/integrations/webhooks/{id}")
+    @Transactional
+    public Map<String, Object> receive(@PathVariable String id,
+            @RequestHeader(value = "X-EOS-Timestamp", required = false) String timestamp,
+            @RequestHeader(value = "X-EOS-Event-Id", required = false) String eventId,
+            @RequestHeader(value = "X-EOS-Signature", required = false) String signature, @RequestBody byte[] payload) {
+        if (payload.length > 32768 || timestamp == null || !timestamp.matches("[0-9]{10,12}") || eventId == null
+                || !eventId.matches("[A-Za-z0-9_-]{1,100}"))
+            throw new ApiException(403, "Signed webhook headers are invalid.");
+        long value;
+        try {
+            value = Long.parseLong(timestamp);
+        } catch (Exception ex) {
+            throw new ApiException(403, "Webhook timestamp is invalid.");
+        }
+        long now = Instant.now().getEpochSecond();
+        if (value < now - 300 || value > now + 300)
+            throw new ApiException(403, "Webhook timestamp has expired.");
+        var row = s.first(s.db.queryForList(
+                "SELECT e.* FROM webhook_endpoints e JOIN tenants t ON t.id=e.tenant_id WHERE e.id=? AND e.direction='INBOUND' AND e.status='ACTIVE' AND t.status='ACTIVE' FOR UPDATE",
+                id), "Webhook endpoint");
+        if (!WebhookDeliveryService.valid(secrets.decrypt(row.get("secret").toString()), timestamp, payload, signature))
+            throw new ApiException(403, "Webhook signature is invalid.");
+        Map<String, Object> data;
+        try {
+            data = s.json.readValue(payload,
+                    new com.fasterxml.jackson.core.type.TypeReference<LinkedHashMap<String, Object>>() {
+                    });
+        } catch (Exception ex) {
+            throw new ApiException(400, "Webhook payload must be a JSON metadata object.");
+        }
+        if (!Set.of("id", "type", "entity", "entityId", "occurredAt").containsAll(data.keySet()))
+            throw new ApiException(400,
+                    "This connector accepts event metadata only; vendor-specific business fields require an approved mapping.");
+        if (data.get("id") != null && !eventId.equals(data.get("id")))
+            throw new ApiException(400, "Event ID does not match the signed payload.");
+        String tenant = row.get("tenant_id").toString();
+        var sub = s.entitlements.subscription(tenant);
+        if (!sub.isEmpty())
+            s.entitlements.writable(sub);
+        if (s.db.queryForObject("SELECT COUNT(*) FROM integration_inbound_events WHERE endpoint_id=? AND event_id=?",
+                Integer.class, id, eventId) > 0)
+            throw new ApiException(409, "Webhook event was already received.");
+        s.db.update(
+                "INSERT INTO integration_inbound_events(id,tenant_id,endpoint_id,event_id,payload,payload_hash) VALUES (?,?,?,?,?,?)",
+                s.id(), tenant, id, eventId, new String(payload, StandardCharsets.UTF_8),
+                Tokens.hash(new String(payload, StandardCharsets.UTF_8)));
+        return Map.of("eventId", eventId, "status", "ACCEPTED");
+    }
+
+    @GetMapping("/org/integrations/inbound-events")
+    public List<Map<String, Object>> inbound(@RequestAttribute Principal principal) {
+        s.allow(principal, "ADMIN", "AUDITOR");
+        return s.db.queryForList(
+                "SELECT id,endpoint_id AS endpointId,event_id AS eventId,payload_hash AS payloadHash,received_at AS receivedAt FROM integration_inbound_events WHERE tenant_id=? ORDER BY received_at DESC LIMIT 200",
+                principal.tenantId());
+    }
+
+    @GetMapping("/org/integrations/credentials")
+    public List<Map<String, Object>> credentials(@RequestAttribute Principal principal) {
+        s.allow(principal, "ADMIN");
+        return s.db.queryForList(
+                "SELECT id,name,scopes,expires_at AS expiresAt,revoked_at AS revokedAt,created_at AS createdAt FROM api_credentials WHERE tenant_id=? ORDER BY created_at DESC",
+                principal.tenantId()).stream().map(row -> {
+                    row.put("scopes", array(row.get("scopes")));
+                    return row;
+                }).toList();
+    }
+
+    @PostMapping("/org/integrations/credentials")
+    @Transactional
+    public Map<String, Object> credential(@RequestAttribute Principal principal,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        String id = s.id(), token = Tokens.issue(), name = Inputs.text(body, "name", 180);
+        Object scopes = body.get("scopes");
+        if (!(scopes instanceof List<?> list) || list.isEmpty() || list.stream().anyMatch(
+                v -> !Set.of("employees:read", "projects:read", "inventory:read", "invoices:read").contains(v)))
+            throw new ApiException(400, "Choose read scopes for employees, projects, inventory or invoices.");
+        int days = s.integer(body, "expiresInDays", 30, 1, 365);
+        s.db.update(
+                "INSERT INTO api_credentials(id,tenant_id,name,token_hash,scopes,created_by,expires_at) VALUES (?,?,?,?,?,?,TIMESTAMPADD(DAY,?,UTC_TIMESTAMP(6)))",
+                id, principal.tenantId(), name, Tokens.hash(token), s.encode(scopes), principal.userId(), days);
+        s.audit.log(principal, "API_CREDENTIAL_CREATED", "apiCredential", id);
+        return Map.of("id", id, "name", name, "token", token, "scopes", scopes, "message",
+                "Copy the bearer token now. Only its hash is stored.");
+    }
+
+    @PostMapping("/org/integrations/credentials/{id}/revoke")
+    @Transactional
+    public Map<String, Object> revoke(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        if (s.db.update(
+                "UPDATE api_credentials SET revoked_at=UTC_TIMESTAMP(6) WHERE tenant_id=? AND id=? AND revoked_at IS NULL",
+                principal.tenantId(), id) == 0)
+            throw new ApiException(404, "Active credential not found.");
+        s.audit.log(principal, "API_CREDENTIAL_REVOKED", "apiCredential", id);
+        return Map.of("id", id, "revoked", true);
+    }
+
+    @PostMapping("/org/integrations/credentials/{id}/rotate")
+    @Transactional
+    public Map<String, Object> rotateCredential(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "INTEGRATIONS", false);
+        int days = s.integer(body, "expiresInDays", 30, 1, 365);
+        String token = Tokens.issue();
+        if (s.db.update(
+                "UPDATE api_credentials SET token_hash=?,expires_at=TIMESTAMPADD(DAY,?,UTC_TIMESTAMP(6)) WHERE tenant_id=? AND id=? AND revoked_at IS NULL",
+                Tokens.hash(token), days, principal.tenantId(), id) == 0)
+            throw new ApiException(404, "Active credential not found.");
+        s.audit.log(principal, "API_CREDENTIAL_ROTATED", "apiCredential", id);
+        return Map.of("id", id, "token", token, "message",
+                "The old bearer token is invalid immediately. Copy the new token now.");
+    }
+
+    @GetMapping("/integrations/data/{kind}")
+    public Map<String, Object> data(@PathVariable String kind,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ") || authorization.length() > 256)
+            throw new ApiException(401, "A valid scoped bearer credential is required.");
+        String token = authorization.substring(7);
+        var rows = s.db.queryForList(
+                "SELECT c.*,u.name AS owner_name,u.email,m.role FROM api_credentials c JOIN tenants t ON t.id=c.tenant_id JOIN users u ON u.id=c.created_by JOIN memberships m ON m.user_id=c.created_by AND m.tenant_id=c.tenant_id WHERE c.token_hash=? AND c.revoked_at IS NULL AND c.expires_at>UTC_TIMESTAMP(6) AND t.status='ACTIVE' AND m.status='ACTIVE' AND u.status='ACTIVE'",
+                Tokens.hash(token));
+        if (rows.isEmpty())
+            throw new ApiException(401, "Integration credential is invalid, revoked or expired.");
+        var credential = rows.getFirst();
+        rate(credential.get("id").toString());
+        if (!Set.of("employees", "projects", "inventory", "invoices").contains(kind)
+                || !array(credential.get("scopes")).contains(kind + ":read"))
+            throw new ApiException(403, "This credential does not include the requested read scope.");
+        Principal owner = new Principal(credential.get("created_by").toString(), credential.get("tenant_id").toString(),
+                credential.get("owner_name").toString(), credential.get("email").toString(),
+                credential.get("role").toString());
+        s.entitlements.require(owner, "INTEGRATIONS", false);
+        List<String> columns = kind.equals("employees")
+                ? List.of("id", "name", "employeeCode", "status", "departmentId", "joinDate")
+                : kind.equals("projects") ? List.of("id", "name", "status", "ownerId")
+                        : List.of("id", "name", "sku", "status", "total", "currency");
+        var records = reports.rows(owner, kind, Map.of()).stream().map(row -> {
+            Map<String, Object> projected = new LinkedHashMap<>();
+            for (String column : columns)
+                if (row.containsKey(column))
+                    projected.put(column, row.get(column));
+            return projected;
+        }).toList();
+        return Map.of("kind", kind, "records", records);
+    }
+
+    private List<?> array(Object value) {
+        try {
+            return s.json.readValue(value.toString(), List.class);
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private void rate(String id) {
+        long now = System.currentTimeMillis();
+        if (rate.size() > 10000)
+            rate.entrySet().removeIf(e -> e.getValue()[1] < now);
+        long[] value = rate.compute(id, (k, old) -> old == null || old[1] < now ? new long[] { 1, now + 60000 }
+                : new long[] { old[0] + 1, old[1] });
+        if (value[0] > 60)
+            throw new ApiException(429, "Integration limit is 60 reads per minute per credential.");
+    }
 }

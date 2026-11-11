@@ -12,32 +12,395 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.*;
 import org.springframework.web.bind.annotation.*;
 
-@RestController @RequestMapping("/api/v1/org/documents")
+@RestController
+@RequestMapping("/api/v1/org/documents")
 public class DocumentController {
-    private final AutomationSupport s;private final DocumentScanner scanner;private final Path directory;private final DocumentBlobStore blobs;
-    private static final int MAX=5*1024*1024;
-    public DocumentController(AutomationSupport s,DocumentScanner scanner,DocumentBlobStore blobs,@Value("${APP_DOCUMENT_DIR:./var/documents}")String directory){this.s=s;this.scanner=scanner;this.blobs=blobs;this.directory=Path.of(directory).toAbsolutePath().normalize();}
-    @GetMapping public List<Map<String,Object>> list(@RequestAttribute Principal principal){s.org(principal);return s.db.queryForList("SELECT * FROM documents WHERE tenant_id=? AND status<>'DELETED' ORDER BY created_at DESC LIMIT 500",principal.tenantId()).stream().filter(row->visible(principal,row)).map(this::view).toList();}
-    @PostMapping @Transactional public Map<String,Object> upload(@RequestAttribute Principal principal,@RequestBody Map<String,Object> body){s.org(principal);s.lock(principal,"DOCUMENTS",true);String visibility=Inputs.optional(body,"visibility",20,"PRIVATE");if(!Set.of("PRIVATE","HR","TENANT").contains(visibility))throw new ApiException(400,"Document visibility must be PRIVATE, HR or TENANT.");if(visibility.equals("HR"))s.allow(principal,"ADMIN","HR");if(visibility.equals("TENANT"))s.allow(principal,"ADMIN","MANAGER");if(principal.role().equals("AUDITOR"))throw new ApiException(403,"Auditors cannot upload documents.");String name=fileName(body),category=Inputs.optional(body,"category",80,"General"),id=s.id();String linkKind=Inputs.optional(body,"linkKind",30,""),linkId=Inputs.optional(body,"linkId",36,"");if(!linkKind.isBlank()){if(!Set.of("employees","projects").contains(linkKind))throw new ApiException(400,"Documents can link to employees or projects.");checkLinked(principal,linkKind,linkId);}else if(!linkId.isBlank())throw new ApiException(400,"Choose a linked record kind.");LocalDate retention=retention(body);s.db.update("INSERT INTO documents(id,tenant_id,owner_id,name,category,visibility,link_kind,link_id,retention_until) VALUES (?,?,?,?,?,?,?,?,?)",id,principal.tenantId(),principal.userId(),name,category,visibility,linkKind,linkId,retention);saveVersion(principal,id,1,name,body);s.audit.log(principal,"DOCUMENT_UPLOADED","document",id);return view(document(principal,id));}
-    @PostMapping("/{id}/versions") @Transactional public Map<String,Object> version(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.lock(principal,"DOCUMENTS",false);var document=document(principal,id);writable(principal,document);int current=((Number)document.get("current_version")).intValue();saveVersion(principal,id,current+1,document.get("name").toString(),body);s.db.update("UPDATE documents SET current_version=? WHERE tenant_id=? AND id=?",current+1,principal.tenantId(),id);s.audit.log(principal,"DOCUMENT_VERSION_CREATED","document",id);return view(document(principal,id));}
-    @GetMapping("/{id}/versions") public List<Map<String,Object>> versions(@RequestAttribute Principal principal,@PathVariable String id){authorized(principal,id);return s.db.queryForList("SELECT id,version,mime,byte_size AS byteSize,sha256,scan_status AS scanStatus,scan_evidence AS scanEvidence,created_by AS createdBy,created_at AS createdAt FROM document_versions WHERE tenant_id=? AND document_id=? ORDER BY version DESC",principal.tenantId(),id);}
-    @PostMapping("/{id}/scan") @Transactional public Map<String,Object> review(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN","HR");s.lock(principal,"DOCUMENTS",false);var document=authorized(principal,id);int version=s.integer(body,"version",((Number)document.get("current_version")).intValue(),1,Integer.MAX_VALUE);var row=s.first(s.db.queryForList("SELECT * FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",principal.tenantId(),id,version),"Document version");if(principal.userId().equals(row.get("created_by")))throw new ApiException(403,"A different authorized reviewer must release an unscanned document.");String decision=Inputs.text(body,"decision",20);if(!Set.of("CLEAN","REJECTED").contains(decision))throw new ApiException(400,"Choose CLEAN or REJECTED.");String evidence=Inputs.text(body,"evidence",1000);s.db.update("UPDATE document_versions SET scan_status=?,scan_evidence=? WHERE tenant_id=? AND id=?",decision,"Manual review by "+principal.userId()+": "+evidence,principal.tenantId(),row.get("id"));s.audit.log(principal,"DOCUMENT_REVIEWED_"+decision,"document",id);return Map.of("id",id,"version",version,"scanStatus",decision);}
-    @GetMapping("/{id}/download") @Transactional public ResponseEntity<byte[]> download(@RequestAttribute Principal principal,@PathVariable String id,@RequestParam(required=false)Integer version,@RequestParam(required=false)String token){var document=authorized(principal,id);if(token!=null){if(token.length()>256||s.db.queryForObject("SELECT COUNT(*) FROM document_download_links WHERE tenant_id=? AND document_id=? AND user_id=? AND token_hash=? AND expires_at>UTC_TIMESTAMP(6)",Integer.class,principal.tenantId(),id,principal.userId(),Tokens.hash(token))!=1)throw new ApiException(403,"Download link is invalid or expired.");}int wanted=version==null?((Number)document.get("current_version")).intValue():version;var file=s.first(s.db.queryForList("SELECT * FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",principal.tenantId(),id,wanted),"Document version");if(!"CLEAN".equals(file.get("scan_status")))throw new ApiException(409,"Document is quarantined pending a clean scanner verdict or independent review.");try{byte[] bytes=blobs.read(principal.tenantId(),file.get("storage_key").toString(),file.get("storage_backend").toString());if(!sha(bytes).equals(file.get("sha256")))throw new ApiException(409,"Document integrity verification failed.");s.db.update("INSERT INTO document_access_events(id,tenant_id,document_id,actor_id,action) VALUES (?,?,?,?,'DOWNLOAD')",s.id(),principal.tenantId(),id,principal.userId());return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.get("mime").toString())).cacheControl(CacheControl.noStore()).header("X-Content-Type-Options","nosniff").header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(document.get("name").toString(),StandardCharsets.UTF_8).build().toString()).body(bytes);}catch(ApiException ex){throw ex;}}
-    @PostMapping("/{id}/links") @Transactional public Map<String,Object> link(@RequestAttribute Principal principal,@PathVariable String id){s.lock(principal,"DOCUMENTS",false);authorized(principal,id);String token=Tokens.issue();s.db.update("INSERT INTO document_download_links(id,tenant_id,document_id,user_id,token_hash,expires_at) VALUES (?,?,?,?,?,TIMESTAMPADD(MINUTE,15,UTC_TIMESTAMP(6)))",s.id(),principal.tenantId(),id,principal.userId(),Tokens.hash(token));s.audit.log(principal,"DOCUMENT_LINK_CREATED","document",id);return Map.of("url","/api/v1/org/documents/"+id+"/download?token="+token,"expiresInSeconds",900);}
-    @PutMapping("/{id}/retention") @Transactional public Map<String,Object> retention(@RequestAttribute Principal principal,@PathVariable String id,@RequestBody Map<String,Object> body){s.allow(principal,"ADMIN");s.lock(principal,"DOCUMENTS",false);document(principal,id);LocalDate until=retention(body);if(!(body.get("legalHold") instanceof Boolean))throw new ApiException(400,"legalHold must be a boolean.");s.db.update("UPDATE documents SET retention_until=?,legal_hold=? WHERE id=? AND tenant_id=?",until,body.get("legalHold"),id,principal.tenantId());s.audit.log(principal,"DOCUMENT_RETENTION_UPDATED","document",id);return view(document(principal,id));}
-    @PostMapping("/{id}/archive") @Transactional public Map<String,Object> archive(@RequestAttribute Principal principal,@PathVariable String id){s.lock(principal,"DOCUMENTS",false);var document=authorized(principal,id);writable(principal,document);s.db.update("UPDATE documents SET status='ARCHIVED' WHERE tenant_id=? AND id=?",principal.tenantId(),id);s.audit.log(principal,"DOCUMENT_ARCHIVED","document",id);return view(document(principal,id));}
-    @DeleteMapping("/{id}") @Transactional public Map<String,Object> delete(@RequestAttribute Principal principal,@PathVariable String id){s.allow(principal,"ADMIN");s.lock(principal,"DOCUMENTS",false);var document=document(principal,id);Object hold=document.get("legal_hold");if(Boolean.TRUE.equals(hold)||(hold instanceof Number n&&n.intValue()!=0))throw new ApiException(409,"Document is under legal hold.");if(document.get("retention_until")!=null&&LocalDate.parse(document.get("retention_until").toString()).isAfter(LocalDate.now(ZoneOffset.UTC)))throw new ApiException(409,"Retention period has not elapsed.");var files=s.db.queryForList("SELECT storage_key,storage_backend FROM document_versions WHERE tenant_id=? AND document_id=?",principal.tenantId(),id);s.db.update("UPDATE documents SET status='DELETED' WHERE tenant_id=? AND id=?",principal.tenantId(),id);s.db.update("DELETE FROM document_download_links WHERE tenant_id=? AND document_id=?",principal.tenantId(),id);TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){for(var file:files)try{blobs.delete(principal.tenantId(),file.get("storage_key").toString(),file.get("storage_backend").toString());}catch(ApiException ignored){}}});s.audit.log(principal,"DOCUMENT_DELETED","document",id);return Map.of("id",id,"status","DELETED");}
-    @GetMapping("/{id}/access") public List<Map<String,Object>> access(@RequestAttribute Principal principal,@PathVariable String id){var document=authorized(principal,id);if(!principal.role().equals("ADMIN")&&!principal.userId().equals(document.get("owner_id")))throw new ApiException(403,"Only the owner or administrator can view access history.");return s.db.queryForList("SELECT actor_id AS actorId,action,created_at AS createdAt FROM document_access_events WHERE tenant_id=? AND document_id=? ORDER BY created_at DESC LIMIT 200",principal.tenantId(),id);}
-    private void saveVersion(Principal p,String id,int version,String name,Map<String,Object> body){String data=Inputs.text(body,"dataUrl",7_100_000);int comma=data.indexOf(',');if(!data.startsWith("data:")||comma<13||comma>100||!data.substring(0,comma).endsWith(";base64"))throw new ApiException(400,"Upload a base64 data URL.");String mime=data.substring(5,comma-7);byte[] content;try{content=Base64.getDecoder().decode(data.substring(comma+1));}catch(Exception ex){throw new ApiException(400,"Invalid base64 file content.");}if(content.length==0||content.length>MAX)throw new ApiException(400,"Documents must be between 1 byte and 5 MB.");validate(content,mime,name);String key=p.tenantId()+"-"+s.id()+".bin",backend=blobs.put(p.tenantId(),key,content);TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCompletion(int status){if(status!=STATUS_COMMITTED)try{blobs.delete(p.tenantId(),key,backend);}catch(ApiException ignored){}}});var verdict=scanner.scan(content);s.db.update("INSERT INTO document_versions(id,tenant_id,document_id,version,storage_key,mime,byte_size,sha256,scan_status,scan_evidence,created_by,storage_backend) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",s.id(),p.tenantId(),id,version,key,mime,content.length,sha(content),verdict.status(),verdict.evidence(),p.userId(),backend);}
-    private void validate(byte[] content,String mime,String name){String lower=name.toLowerCase(Locale.ROOT);boolean valid=switch(mime){case "application/pdf"->content.length>5&&new String(content,0,5,StandardCharsets.US_ASCII).equals("%PDF-")&&lower.endsWith(".pdf");case "image/png"->content.length>8&&(content[0]&255)==137&&new String(content,1,3,StandardCharsets.US_ASCII).equals("PNG")&&lower.endsWith(".png");case "image/jpeg"->content.length>3&&(content[0]&255)==255&&(content[1]&255)==216&&(lower.endsWith(".jpg")||lower.endsWith(".jpeg"));case "image/webp"->content.length>=26&&new String(content,0,4,StandardCharsets.US_ASCII).equals("RIFF")&&new String(content,8,4,StandardCharsets.US_ASCII).equals("WEBP")&&lower.endsWith(".webp");case "text/plain","text/csv"->{boolean text=(mime.equals("text/plain")&&lower.endsWith(".txt"))||(mime.equals("text/csv")&&lower.endsWith(".csv"));try{String decoded=StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(content)).toString();text=text&&!decoded.contains("\0")&&!decoded.stripLeading().toLowerCase(Locale.ROOT).startsWith("<html")&&!decoded.stripLeading().toLowerCase(Locale.ROOT).startsWith("<svg");}catch(Exception ex){text=false;}yield text;}default->false;};if(!valid)throw new ApiException(400,"File type, extension and content must match: PDF, PNG, JPEG, WebP, UTF-8 TXT or CSV. Executable and HTML/SVG files are rejected.");}
-    private String fileName(Map<String,Object> body){String name=Inputs.text(body,"name",180);if(name.matches(".*[\\\\/:*?\"<>|\\p{Cntrl}].*"))throw new ApiException(400,"Choose a plain filename without path or control characters.");return name;}
-    private LocalDate retention(Map<String,Object> body){String value=Inputs.optional(body,"retentionUntil",10,"");if(value.isBlank())return null;try{LocalDate until=LocalDate.parse(value);if(until.isBefore(LocalDate.now(ZoneOffset.UTC)))throw new IllegalArgumentException();return until;}catch(Exception ex){throw new ApiException(400,"Retention date must be today or later.");}}
-    private Map<String,Object> document(Principal p,String id){s.org(p);return s.first(s.db.queryForList("SELECT * FROM documents WHERE id=? AND tenant_id=? AND status<>'DELETED'",id,p.tenantId()),"Document");}
-    private Map<String,Object> authorized(Principal p,String id){var document=document(p,id);if(!visible(p,document))throw new ApiException(403,"You cannot access this document.");return document;}
-    private boolean visible(Principal p,Map<String,Object> d){boolean allowed=p.role().equals("ADMIN")||p.userId().equals(d.get("owner_id"))||d.get("visibility").equals("TENANT")||(d.get("visibility").equals("HR")&&p.role().equals("HR"));if(!allowed)return false;try{if(!d.get("link_kind").toString().isBlank())checkLinked(p,d.get("link_kind").toString(),d.get("link_id").toString());return true;}catch(ApiException ex){return false;}}
-    private void checkLinked(Principal p,String kind,String id){var row=s.first(s.db.queryForList("SELECT payload FROM business_records WHERE tenant_id=? AND kind=? AND id=?",p.tenantId(),kind,id),"Linked record");var payload=s.decode(row.get("payload"));if(p.role().equals("ADMIN"))return;if(kind.equals("employees")&&(p.role().equals("HR")||p.userId().equals(payload.get("userId"))))return;if(kind.equals("projects")&&(p.role().equals("MANAGER")||p.userId().equals(payload.get("ownerId"))||(payload.get("memberIds") instanceof List<?> ids&&ids.contains(p.userId()))))return;throw new ApiException(403,"You cannot access the linked business object.");}
-    private void writable(Principal p,Map<String,Object> d){if(!d.get("status").equals("ACTIVE"))throw new ApiException(409,"Archived documents are read-only.");if(p.role().equals("AUDITOR")||(!p.role().equals("ADMIN")&&!p.userId().equals(d.get("owner_id"))))throw new ApiException(403,"Only the owner or administrator can change this document.");}
-    private Map<String,Object> view(Map<String,Object> d){var result=new LinkedHashMap<String,Object>();for(String key:List.of("id","name","category","visibility","status"))result.put(key,d.get(key));result.put("ownerId",d.get("owner_id"));result.put("version",d.get("current_version"));result.put("retentionUntil",d.get("retention_until"));result.put("legalHold",d.get("legal_hold"));result.put("linkKind",d.get("link_kind"));result.put("linkId",d.get("link_id"));result.putAll(s.db.queryForMap("SELECT mime,byte_size AS byteSize,scan_status AS scanStatus,sha256 FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",d.get("tenant_id"),d.get("id"),d.get("current_version")));return result;}
-    private Path path(String tenant,String key){if(!key.matches("[0-9a-f-]{73}\\.bin")||!key.startsWith(tenant+"-"))throw new ApiException(404,"Stored document is unavailable.");Path path=directory.resolve(key).normalize();if(!path.startsWith(directory))throw new ApiException(404,"Stored document is unavailable.");return path;}
-    private static String sha(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(Exception ex){throw new IllegalStateException(ex);}}
+    private final AutomationSupport s;
+    private final DocumentScanner scanner;
+    private final Path directory;
+    private final DocumentBlobStore blobs;
+    private static final int MAX = 5 * 1024 * 1024;
+
+    public DocumentController(AutomationSupport s, DocumentScanner scanner, DocumentBlobStore blobs,
+            @Value("${APP_DOCUMENT_DIR:./var/documents}") String directory) {
+        this.s = s;
+        this.scanner = scanner;
+        this.blobs = blobs;
+        this.directory = Path.of(directory).toAbsolutePath().normalize();
+    }
+
+    @GetMapping
+    public List<Map<String, Object>> list(@RequestAttribute Principal principal) {
+        s.org(principal);
+        return s.db.queryForList(
+                "SELECT * FROM documents WHERE tenant_id=? AND status<>'DELETED' ORDER BY created_at DESC LIMIT 500",
+                principal.tenantId()).stream().filter(row -> visible(principal, row)).map(this::view).toList();
+    }
+
+    @PostMapping
+    @Transactional
+    public Map<String, Object> upload(@RequestAttribute Principal principal, @RequestBody Map<String, Object> body) {
+        s.org(principal);
+        s.lock(principal, "DOCUMENTS", true);
+        String visibility = Inputs.optional(body, "visibility", 20, "PRIVATE");
+        if (!Set.of("PRIVATE", "HR", "TENANT").contains(visibility))
+            throw new ApiException(400, "Document visibility must be PRIVATE, HR or TENANT.");
+        if (visibility.equals("HR"))
+            s.allow(principal, "ADMIN", "HR");
+        if (visibility.equals("TENANT"))
+            s.allow(principal, "ADMIN", "MANAGER");
+        if (principal.role().equals("AUDITOR"))
+            throw new ApiException(403, "Auditors cannot upload documents.");
+        String name = fileName(body), category = Inputs.optional(body, "category", 80, "General"), id = s.id();
+        String linkKind = Inputs.optional(body, "linkKind", 30, ""), linkId = Inputs.optional(body, "linkId", 36, "");
+        if (!linkKind.isBlank()) {
+            if (!Set.of("employees", "projects").contains(linkKind))
+                throw new ApiException(400, "Documents can link to employees or projects.");
+            checkLinked(principal, linkKind, linkId);
+        } else if (!linkId.isBlank())
+            throw new ApiException(400, "Choose a linked record kind.");
+        LocalDate retention = retention(body);
+        s.db.update(
+                "INSERT INTO documents(id,tenant_id,owner_id,name,category,visibility,link_kind,link_id,retention_until) VALUES (?,?,?,?,?,?,?,?,?)",
+                id, principal.tenantId(), principal.userId(), name, category, visibility, linkKind, linkId, retention);
+        saveVersion(principal, id, 1, name, body);
+        s.audit.log(principal, "DOCUMENT_UPLOADED", "document", id);
+        return view(document(principal, id));
+    }
+
+    @PostMapping("/{id}/versions")
+    @Transactional
+    public Map<String, Object> version(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.lock(principal, "DOCUMENTS", false);
+        var document = document(principal, id);
+        writable(principal, document);
+        int current = ((Number) document.get("current_version")).intValue();
+        saveVersion(principal, id, current + 1, document.get("name").toString(), body);
+        s.db.update("UPDATE documents SET current_version=? WHERE tenant_id=? AND id=?", current + 1,
+                principal.tenantId(), id);
+        s.audit.log(principal, "DOCUMENT_VERSION_CREATED", "document", id);
+        return view(document(principal, id));
+    }
+
+    @GetMapping("/{id}/versions")
+    public List<Map<String, Object>> versions(@RequestAttribute Principal principal, @PathVariable String id) {
+        authorized(principal, id);
+        return s.db.queryForList(
+                "SELECT id,version,mime,byte_size AS byteSize,sha256,scan_status AS scanStatus,scan_evidence AS scanEvidence,created_by AS createdBy,created_at AS createdAt FROM document_versions WHERE tenant_id=? AND document_id=? ORDER BY version DESC",
+                principal.tenantId(), id);
+    }
+
+    @PostMapping("/{id}/scan")
+    @Transactional
+    public Map<String, Object> review(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN", "HR");
+        s.lock(principal, "DOCUMENTS", false);
+        var document = authorized(principal, id);
+        int version = s.integer(body, "version", ((Number) document.get("current_version")).intValue(), 1,
+                Integer.MAX_VALUE);
+        var row = s.first(
+                s.db.queryForList("SELECT * FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",
+                        principal.tenantId(), id, version),
+                "Document version");
+        if (principal.userId().equals(row.get("created_by")))
+            throw new ApiException(403, "A different authorized reviewer must release an unscanned document.");
+        String decision = Inputs.text(body, "decision", 20);
+        if (!Set.of("CLEAN", "REJECTED").contains(decision))
+            throw new ApiException(400, "Choose CLEAN or REJECTED.");
+        String evidence = Inputs.text(body, "evidence", 1000);
+        s.db.update("UPDATE document_versions SET scan_status=?,scan_evidence=? WHERE tenant_id=? AND id=?", decision,
+                "Manual review by " + principal.userId() + ": " + evidence, principal.tenantId(), row.get("id"));
+        s.audit.log(principal, "DOCUMENT_REVIEWED_" + decision, "document", id);
+        return Map.of("id", id, "version", version, "scanStatus", decision);
+    }
+
+    @GetMapping("/{id}/download")
+    @Transactional
+    public ResponseEntity<byte[]> download(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestParam(required = false) Integer version, @RequestParam(required = false) String token) {
+        var document = authorized(principal, id);
+        if (token != null) {
+            if (token.length() > 256 || s.db.queryForObject(
+                    "SELECT COUNT(*) FROM document_download_links WHERE tenant_id=? AND document_id=? AND user_id=? AND token_hash=? AND expires_at>UTC_TIMESTAMP(6)",
+                    Integer.class, principal.tenantId(), id, principal.userId(), Tokens.hash(token)) != 1)
+                throw new ApiException(403, "Download link is invalid or expired.");
+        }
+        int wanted = version == null ? ((Number) document.get("current_version")).intValue() : version;
+        var file = s.first(
+                s.db.queryForList("SELECT * FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",
+                        principal.tenantId(), id, wanted),
+                "Document version");
+        if (!"CLEAN".equals(file.get("scan_status")))
+            throw new ApiException(409,
+                    "Document is quarantined pending a clean scanner verdict or independent review.");
+        try {
+            byte[] bytes = blobs.read(principal.tenantId(), file.get("storage_key").toString(),
+                    file.get("storage_backend").toString());
+            if (!sha(bytes).equals(file.get("sha256")))
+                throw new ApiException(409, "Document integrity verification failed.");
+            s.db.update(
+                    "INSERT INTO document_access_events(id,tenant_id,document_id,actor_id,action) VALUES (?,?,?,?,'DOWNLOAD')",
+                    s.id(), principal.tenantId(), id, principal.userId());
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType(file.get("mime").toString()))
+                    .cacheControl(CacheControl.noStore()).header("X-Content-Type-Options", "nosniff")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                            .filename(document.get("name").toString(), StandardCharsets.UTF_8).build().toString())
+                    .body(bytes);
+        } catch (ApiException ex) {
+            throw ex;
+        }
+    }
+
+    @PostMapping("/{id}/links")
+    @Transactional
+    public Map<String, Object> link(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.lock(principal, "DOCUMENTS", false);
+        authorized(principal, id);
+        String token = Tokens.issue();
+        s.db.update(
+                "INSERT INTO document_download_links(id,tenant_id,document_id,user_id,token_hash,expires_at) VALUES (?,?,?,?,?,TIMESTAMPADD(MINUTE,15,UTC_TIMESTAMP(6)))",
+                s.id(), principal.tenantId(), id, principal.userId(), Tokens.hash(token));
+        s.audit.log(principal, "DOCUMENT_LINK_CREATED", "document", id);
+        return Map.of("url", "/api/v1/org/documents/" + id + "/download?token=" + token, "expiresInSeconds", 900);
+    }
+
+    @PutMapping("/{id}/retention")
+    @Transactional
+    public Map<String, Object> retention(@RequestAttribute Principal principal, @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "DOCUMENTS", false);
+        document(principal, id);
+        LocalDate until = retention(body);
+        if (!(body.get("legalHold") instanceof Boolean))
+            throw new ApiException(400, "legalHold must be a boolean.");
+        s.db.update("UPDATE documents SET retention_until=?,legal_hold=? WHERE id=? AND tenant_id=?", until,
+                body.get("legalHold"), id, principal.tenantId());
+        s.audit.log(principal, "DOCUMENT_RETENTION_UPDATED", "document", id);
+        return view(document(principal, id));
+    }
+
+    @PostMapping("/{id}/archive")
+    @Transactional
+    public Map<String, Object> archive(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.lock(principal, "DOCUMENTS", false);
+        var document = authorized(principal, id);
+        writable(principal, document);
+        s.db.update("UPDATE documents SET status='ARCHIVED' WHERE tenant_id=? AND id=?", principal.tenantId(), id);
+        s.audit.log(principal, "DOCUMENT_ARCHIVED", "document", id);
+        return view(document(principal, id));
+    }
+
+    @DeleteMapping("/{id}")
+    @Transactional
+    public Map<String, Object> delete(@RequestAttribute Principal principal, @PathVariable String id) {
+        s.allow(principal, "ADMIN");
+        s.lock(principal, "DOCUMENTS", false);
+        var document = document(principal, id);
+        Object hold = document.get("legal_hold");
+        if (Boolean.TRUE.equals(hold) || (hold instanceof Number n && n.intValue() != 0))
+            throw new ApiException(409, "Document is under legal hold.");
+        if (document.get("retention_until") != null
+                && LocalDate.parse(document.get("retention_until").toString()).isAfter(LocalDate.now(ZoneOffset.UTC)))
+            throw new ApiException(409, "Retention period has not elapsed.");
+        var files = s.db.queryForList(
+                "SELECT storage_key,storage_backend FROM document_versions WHERE tenant_id=? AND document_id=?",
+                principal.tenantId(), id);
+        s.db.update("UPDATE documents SET status='DELETED' WHERE tenant_id=? AND id=?", principal.tenantId(), id);
+        s.db.update("DELETE FROM document_download_links WHERE tenant_id=? AND document_id=?", principal.tenantId(),
+                id);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                for (var file : files)
+                    try {
+                        blobs.delete(principal.tenantId(), file.get("storage_key").toString(),
+                                file.get("storage_backend").toString());
+                    } catch (ApiException ignored) {
+                    }
+            }
+        });
+        s.audit.log(principal, "DOCUMENT_DELETED", "document", id);
+        return Map.of("id", id, "status", "DELETED");
+    }
+
+    @GetMapping("/{id}/access")
+    public List<Map<String, Object>> access(@RequestAttribute Principal principal, @PathVariable String id) {
+        var document = authorized(principal, id);
+        if (!principal.role().equals("ADMIN") && !principal.userId().equals(document.get("owner_id")))
+            throw new ApiException(403, "Only the owner or administrator can view access history.");
+        return s.db.queryForList(
+                "SELECT actor_id AS actorId,action,created_at AS createdAt FROM document_access_events WHERE tenant_id=? AND document_id=? ORDER BY created_at DESC LIMIT 200",
+                principal.tenantId(), id);
+    }
+
+    private void saveVersion(Principal p, String id, int version, String name, Map<String, Object> body) {
+        String data = Inputs.text(body, "dataUrl", 7_100_000);
+        int comma = data.indexOf(',');
+        if (!data.startsWith("data:") || comma < 13 || comma > 100 || !data.substring(0, comma).endsWith(";base64"))
+            throw new ApiException(400, "Upload a base64 data URL.");
+        String mime = data.substring(5, comma - 7);
+        byte[] content;
+        try {
+            content = Base64.getDecoder().decode(data.substring(comma + 1));
+        } catch (Exception ex) {
+            throw new ApiException(400, "Invalid base64 file content.");
+        }
+        if (content.length == 0 || content.length > MAX)
+            throw new ApiException(400, "Documents must be between 1 byte and 5 MB.");
+        validate(content, mime, name);
+        String key = p.tenantId() + "-" + s.id() + ".bin", backend = blobs.put(p.tenantId(), key, content);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED)
+                    try {
+                        blobs.delete(p.tenantId(), key, backend);
+                    } catch (ApiException ignored) {
+                    }
+            }
+        });
+        var verdict = scanner.scan(content);
+        s.db.update(
+                "INSERT INTO document_versions(id,tenant_id,document_id,version,storage_key,mime,byte_size,sha256,scan_status,scan_evidence,created_by,storage_backend) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                s.id(), p.tenantId(), id, version, key, mime, content.length, sha(content), verdict.status(),
+                verdict.evidence(), p.userId(), backend);
+    }
+
+    private void validate(byte[] content, String mime, String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        boolean valid = switch (mime) {
+        case "application/pdf" -> content.length > 5
+                && new String(content, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-") && lower.endsWith(".pdf");
+        case "image/png" -> content.length > 8 && (content[0] & 255) == 137
+                && new String(content, 1, 3, StandardCharsets.US_ASCII).equals("PNG") && lower.endsWith(".png");
+        case "image/jpeg" -> content.length > 3 && (content[0] & 255) == 255 && (content[1] & 255) == 216
+                && (lower.endsWith(".jpg") || lower.endsWith(".jpeg"));
+        case "image/webp" -> content.length >= 26 && new String(content, 0, 4, StandardCharsets.US_ASCII).equals("RIFF")
+                && new String(content, 8, 4, StandardCharsets.US_ASCII).equals("WEBP") && lower.endsWith(".webp");
+        case "text/plain", "text/csv" -> {
+            boolean text = (mime.equals("text/plain") && lower.endsWith(".txt"))
+                    || (mime.equals("text/csv") && lower.endsWith(".csv"));
+            try {
+                String decoded = StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(content))
+                        .toString();
+                text = text && !decoded.contains("\0")
+                        && !decoded.stripLeading().toLowerCase(Locale.ROOT).startsWith("<html")
+                        && !decoded.stripLeading().toLowerCase(Locale.ROOT).startsWith("<svg");
+            } catch (Exception ex) {
+                text = false;
+            }
+            yield text;
+        }
+        default -> false;
+        };
+        if (!valid)
+            throw new ApiException(400,
+                    "File type, extension and content must match: PDF, PNG, JPEG, WebP, UTF-8 TXT or CSV. Executable and HTML/SVG files are rejected.");
+    }
+
+    private String fileName(Map<String, Object> body) {
+        String name = Inputs.text(body, "name", 180);
+        if (name.matches(".*[\\\\/:*?\"<>|\\p{Cntrl}].*"))
+            throw new ApiException(400, "Choose a plain filename without path or control characters.");
+        return name;
+    }
+
+    private LocalDate retention(Map<String, Object> body) {
+        String value = Inputs.optional(body, "retentionUntil", 10, "");
+        if (value.isBlank())
+            return null;
+        try {
+            LocalDate until = LocalDate.parse(value);
+            if (until.isBefore(LocalDate.now(ZoneOffset.UTC)))
+                throw new IllegalArgumentException();
+            return until;
+        } catch (Exception ex) {
+            throw new ApiException(400, "Retention date must be today or later.");
+        }
+    }
+
+    private Map<String, Object> document(Principal p, String id) {
+        s.org(p);
+        return s.first(s.db.queryForList("SELECT * FROM documents WHERE id=? AND tenant_id=? AND status<>'DELETED'", id,
+                p.tenantId()), "Document");
+    }
+
+    private Map<String, Object> authorized(Principal p, String id) {
+        var document = document(p, id);
+        if (!visible(p, document))
+            throw new ApiException(403, "You cannot access this document.");
+        return document;
+    }
+
+    private boolean visible(Principal p, Map<String, Object> d) {
+        boolean allowed = p.role().equals("ADMIN") || p.userId().equals(d.get("owner_id"))
+                || d.get("visibility").equals("TENANT") || (d.get("visibility").equals("HR") && p.role().equals("HR"));
+        if (!allowed)
+            return false;
+        try {
+            if (!d.get("link_kind").toString().isBlank())
+                checkLinked(p, d.get("link_kind").toString(), d.get("link_id").toString());
+            return true;
+        } catch (ApiException ex) {
+            return false;
+        }
+    }
+
+    private void checkLinked(Principal p, String kind, String id) {
+        var row = s
+                .first(s.db.queryForList("SELECT payload FROM business_records WHERE tenant_id=? AND kind=? AND id=?",
+                        p.tenantId(), kind, id), "Linked record");
+        var payload = s.decode(row.get("payload"));
+        if (p.role().equals("ADMIN"))
+            return;
+        if (kind.equals("employees") && (p.role().equals("HR") || p.userId().equals(payload.get("userId"))))
+            return;
+        if (kind.equals("projects") && (p.role().equals("MANAGER") || p.userId().equals(payload.get("ownerId"))
+                || (payload.get("memberIds") instanceof List<?> ids && ids.contains(p.userId()))))
+            return;
+        throw new ApiException(403, "You cannot access the linked business object.");
+    }
+
+    private void writable(Principal p, Map<String, Object> d) {
+        if (!d.get("status").equals("ACTIVE"))
+            throw new ApiException(409, "Archived documents are read-only.");
+        if (p.role().equals("AUDITOR") || (!p.role().equals("ADMIN") && !p.userId().equals(d.get("owner_id"))))
+            throw new ApiException(403, "Only the owner or administrator can change this document.");
+    }
+
+    private Map<String, Object> view(Map<String, Object> d) {
+        var result = new LinkedHashMap<String, Object>();
+        for (String key : List.of("id", "name", "category", "visibility", "status"))
+            result.put(key, d.get(key));
+        result.put("ownerId", d.get("owner_id"));
+        result.put("version", d.get("current_version"));
+        result.put("retentionUntil", d.get("retention_until"));
+        result.put("legalHold", d.get("legal_hold"));
+        result.put("linkKind", d.get("link_kind"));
+        result.put("linkId", d.get("link_id"));
+        result.putAll(s.db.queryForMap(
+                "SELECT mime,byte_size AS byteSize,scan_status AS scanStatus,sha256 FROM document_versions WHERE tenant_id=? AND document_id=? AND version=?",
+                d.get("tenant_id"), d.get("id"), d.get("current_version")));
+        return result;
+    }
+
+    private Path path(String tenant, String key) {
+        if (!key.matches("[0-9a-f-]{73}\\.bin") || !key.startsWith(tenant + "-"))
+            throw new ApiException(404, "Stored document is unavailable.");
+        Path path = directory.resolve(key).normalize();
+        if (!path.startsWith(directory))
+            throw new ApiException(404, "Stored document is unavailable.");
+        return path;
+    }
+
+    private static String sha(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
 }

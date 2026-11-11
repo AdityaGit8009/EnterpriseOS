@@ -16,29 +16,278 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties={"APP_DOCUMENT_DIR=./target/test-extension-documents","APP_ENCRYPTION_KEY=1111111111111111111111111111111111111111111111111111111111111111","APP_DIGEST_POLL_MS=3600000"})
-@AutoConfigureMockMvc @EnabledIf("com.enterpriseos.TestDatabase#available")
+@SpringBootTest(properties = { "APP_DOCUMENT_DIR=./target/test-extension-documents",
+        "APP_ENCRYPTION_KEY=1111111111111111111111111111111111111111111111111111111111111111",
+        "APP_DIGEST_POLL_MS=3600000" })
+@AutoConfigureMockMvc
+@EnabledIf("com.enterpriseos.TestDatabase#available")
 class AutomationExtensionIntegrationTest {
-    @DynamicPropertySource static void db(DynamicPropertyRegistry r){TestDatabase.configure(r);}
-    @Autowired JdbcTemplate db;@Autowired ObjectMapper json;@Autowired MockMvc mvc;
-    @Autowired AutomationController automation;@Autowired WorkflowExtensionsController workflows;
-    @Autowired OperationsController workforce;@Autowired NotificationExtensionsController notifications;
-    @Autowired NotificationDigestService digests;@Autowired ExperienceController experience;
-    @Autowired DocumentController documents;@Autowired DocumentPreviewController previews;@Autowired ReportService reports;
-    String tenant;Principal admin,member,hr,foreignAdmin;
-    private String id(){return UUID.randomUUID().toString();}
-    @BeforeEach void seed(){tenant=id();String other=id();for(String t:List.of(tenant,other)){db.update("INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','UTC',UTC_TIMESTAMP(6))",t,"Extension test",t);db.update("INSERT INTO organization_profiles(tenant_id,legal_name,email) VALUES(?,'Test','test@example.test')",t);}admin=user(tenant,"ADMIN");member=user(tenant,"MEMBER");hr=user(tenant,"HR");foreignAdmin=user(other,"ADMIN");}
-    private Principal user(String t,String role){String id=id();db.update("INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES(?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))",id,role,id+"@example.test","unused");db.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES(?,?,?,?,'ACTIVE')",id(),t,id,role);return new Principal(id,t,role,id+"@example.test",role);}
-    private String definition(){return automation.createDefinition(admin,Map.of("name","Typed approval "+id(),"steps",List.of(Map.of("name","Review","approverRole","HR","mode","ANY","dueHours",24)))).get("id").toString();}
-    private List<Map<String,Object>> schema(){return List.of(Map.of("key","budget","label","Budget","type","NUMBER","required",true,"min",10,"max",1000),Map.of("key","category","label","Category","type","SELECT","required",true,"options",List.of("Equipment","Travel")));}
-    @Test void dryRunHasNoWritesAndPublishedTypedSchemaIsIndependentFromDraft(){String def=definition();workflows.form(admin,def,Map.of("fields",schema()));long before=db.queryForObject("SELECT COUNT(*) FROM workflow_instances WHERE tenant_id=?",Long.class,tenant);assertEquals(false,workflows.dryRun(member,def,Map.of("amount",50,"formData",Map.of("budget",1,"category","Travel"))).get("valid"));assertEquals(true,workflows.dryRun(member,def,Map.of("amount",50,"formData",Map.of("budget",50,"category","Travel"))).get("valid"));assertEquals(before,db.queryForObject("SELECT COUNT(*) FROM workflow_instances WHERE tenant_id=?",Long.class,tenant));automation.publish(admin,def);workflows.form(admin,def,Map.of("fields",List.of(Map.of("key","newDraftField","label","Draft field","type","TEXT","required",true))));assertEquals(schema().size(),((List<?>)workflows.form(member,def).get("publishedFields")).size());assertEquals(400,assertThrows(ApiException.class,()->automation.start(member,Map.of("definitionId",def,"title","Bad","formData",Map.of("budget",50,"category","Invalid")))).status());var started=automation.start(member,Map.of("definitionId",def,"title","Valid published data","formData",Map.of("budget",50,"category","Travel")));assertEquals(def,started.get("definitionId"));assertEquals(2,((List<?>)started.get("formFields")).size());assertEquals(400,assertThrows(ApiException.class,()->workflows.form(admin,def,Map.of("fields",List.of(Map.of("key","tenantId","label","Forbidden","type","TEXT"))))).status());}
-    @Test void requestChangesResubmitsAsNewAuditableInstanceOnOriginalVersion(){String def=definition();workflows.form(admin,def,Map.of("fields",schema()));automation.publish(admin,def);String original=automation.start(member,Map.of("definitionId",def,"title","Request","formData",Map.of("budget",50,"category","Travel"))).get("id").toString();workflows.changes(hr,original,Map.of("reason","Use the correct budget"));assertEquals(409,assertThrows(ApiException.class,()->automation.decide(hr,original,Map.of("decision","APPROVED"))).status());assertEquals(403,assertThrows(ApiException.class,()->workflows.resubmit(admin,original,Map.of("formData",Map.of("budget",60,"category","Travel")))).status());var revised=workflows.resubmit(member,original,Map.of("formData",Map.of("budget",60,"category","Travel")));assertNotEquals(original,revised.get("id"));assertEquals(original,revised.get("resubmissionOf"));assertEquals("SUPERSEDED",db.queryForObject("SELECT state FROM workflow_instances WHERE id=?",String.class,original));assertEquals(1,((Number)revised.get("definitionVersion")).intValue());assertEquals("APPROVED",automation.decide(hr,revised.get("id").toString(),Map.of("decision","APPROVED")).get("state"));}
-    @Test void mentionsLoseVisibilityWhenProjectAccessIsRevokedAndCannotLeakIntoDigest(){var project=workforce.create(admin,"projects",Map.of("name","Private project","ownerId",admin.userId(),"memberIds",List.of(member.userId(),hr.userId())));String text="@{"+hr.userId()+"} confidential task comment";notifications.mention(admin,Map.of("body",text,"recipientIds",List.of(hr.userId()),"projectId",project.get("id")));assertTrue(automation.notifications(hr).stream().anyMatch(n->text.equals(n.get("body"))));assertEquals(404,assertThrows(ApiException.class,()->notifications.mention(member,Map.of("body","@{"+foreignAdmin.userId()+"}","projectId",project.get("id")))).status());workforce.update(admin,"projects",project.get("id").toString(),Map.of("version",project.get("version"),"memberIds",List.of(member.userId())));assertTrue(automation.notifications(hr).stream().noneMatch(n->text.equals(n.get("body"))));assertTrue(notifications.mentions(hr).isEmpty());assertEquals(0,((Number)digests.send(hr).get("notificationCount")).intValue());assertEquals(0,db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?",Integer.class,hr.email()));}
-    @Test void ownDigestsQueueRealMailOncePerUnreadNotification(){automation.announce(admin,Map.of("title","A real notice","body","For this member only","recipientId",member.userId()));digests.configure(member,Map.of("enabled",true,"cadenceHours",1));assertEquals("QUEUED",digests.send(member).get("status"));assertEquals("EMPTY",digests.send(member).get("status"));assertEquals(1,db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?",Integer.class,member.email()));assertTrue(notifications.history(foreignAdmin).isEmpty());automation.announce(admin,Map.of("title","Another notice","body","Only one new digest item","recipientId",member.userId()));assertEquals(1,((Number)digests.send(member).get("notificationCount")).intValue());assertEquals(2,db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?",Integer.class,member.email()));}
-    @Test void widgetLayoutsArePersonalAndModuleFlagsDenyServerOperations()throws Exception{workforce.create(admin,"employees",Map.of("name","Employee","employeeCode","W1"));experience.widgets(admin,Map.of("widgets",List.of(Map.of("id","people","title","People","source","employees","type","METRIC","order",0))));assertEquals(1,((Number)((Map<?,?>)experience.widgetData(admin).getFirst().get("data")).get("count")).intValue());assertTrue(((List<?>)experience.widgets(foreignAdmin).get("widgets")).isEmpty());assertEquals(403,assertThrows(ApiException.class,()->experience.widgets(member,Map.of("widgets",List.of(Map.of("id","private","title","Private HR","source","employees","type","LIST","order",0))))).status());experience.flag(admin,"PROJECTS",Map.of("enabled",false));assertEquals(403,assertThrows(ApiException.class,()->workforce.create(admin,"projects",Map.of("name","Disabled"))).status());String raw=Tokens.issue();db.update("INSERT INTO sessions(id,token_hash,user_id,tenant_id,created_at,expires_at) VALUES (?,?,?,?,UTC_TIMESTAMP(6),TIMESTAMPADD(HOUR,1,UTC_TIMESTAMP(6)))",id(),Tokens.hash(raw),admin.userId(),tenant);mvc.perform(get("/api/v1/org/records/projects").cookie(new jakarta.servlet.http.Cookie("EOS_SESSION",raw))).andExpect(status().isForbidden());experience.flag(admin,"PROJECTS",Map.of("enabled",true));assertNotNull(workforce.create(admin,"projects",Map.of("name","Enabled")).get("id"));}
-    @Test void previewUsesCurrentDocumentAuthorizationQuarantineAndSandbox(){String text="<script>must remain plain text</script>";var file=documents.upload(member,Map.of("name","safe.txt","dataUrl","data:text/plain;base64,"+Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8))));String id=file.get("id").toString();assertEquals(409,assertThrows(ApiException.class,()->previews.preview(member,id,null)).status());documents.review(admin,id,Map.of("decision","CLEAN","evidence","Independent review of text content"));var preview=previews.preview(member,id,null);assertEquals("text/plain",preview.getHeaders().getContentType().getType()+"/"+preview.getHeaders().getContentType().getSubtype());assertTrue(preview.getHeaders().getFirst("Content-Security-Policy").contains("sandbox"));assertArrayEquals(text.getBytes(StandardCharsets.UTF_8),preview.getBody());assertEquals(404,assertThrows(ApiException.class,()->previews.preview(foreignAdmin,id,null)).status());}
-    @Test void conversionAnalyticsUseActualStatusesAndCurrentSalesOwnership(){Principal sales=user(tenant,"SALES");entity("leads","CONVERTED",sales,Map.of("name","Converted","ownerId",sales.userId()));entity("leads","NEW",sales,Map.of("name","Open","ownerId",sales.userId()));entity("leads","CONVERTED",admin,Map.of("name","Another owner's lead","ownerId",admin.userId()));String stage=entity("pipelineStages","ACTIVE",admin,Map.of("name","Won","outcome","WON"));entity("opportunities","ACTIVE",sales,Map.of("name","Won INR","ownerId",sales.userId(),"stageId",stage,"amount",120,"currency","INR"));var conversion=experience.conversions(sales,null,null);assertEquals(2,((Number)conversion.get("leadCount")).intValue());assertEquals(1,((Number)conversion.get("convertedLeadCount")).intValue());assertEquals(50.0,((Number)conversion.get("leadConversionPercent")).doubleValue());assertEquals("120",((Map<?,?>)conversion.get("wonAmountsByCurrency")).get("INR").toString());assertEquals(0,((Number)experience.conversions(foreignAdmin,null,null).get("leadCount")).intValue());}
-    @Test void internalReportsRecheckCustomSourcePermissionAfterAssignment(){workforce.create(admin,"employees",Map.of("name","Protected HR","employeeCode","C1"));var export=reports.generate(hr,"HR snapshot","employees",Map.of(),null);String role=id();db.update("INSERT INTO custom_roles(id,tenant_id,name,base_role,permissions) VALUES (?,?,?,'HR',?)",role,tenant,"Reports without HR source",encode(List.of("GET /api/v1/org/reports/**","POST /api/v1/org/reports/**")));db.update("UPDATE memberships SET custom_role_id=? WHERE tenant_id=? AND user_id=?",role,tenant,hr.userId());assertEquals(403,assertThrows(ApiException.class,()->reports.generate(hr,"Denied","employees",Map.of(),null)).status());assertEquals(403,assertThrows(ApiException.class,()->reports.content(hr,export.get("id").toString())).status());}
-    private String entity(String kind,String status,Principal owner,Map<String,Object> payload){String id=id();db.update("INSERT INTO business_entities(id,tenant_id,kind,payload,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?)",id,tenant,kind,encode(payload),status,owner.userId(),owner.userId());return id;}
-    private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception ex){throw new IllegalStateException(ex);}}
+    @DynamicPropertySource
+    static void db(DynamicPropertyRegistry r) {
+        TestDatabase.configure(r);
+    }
+
+    @Autowired
+    JdbcTemplate db;
+    @Autowired
+    ObjectMapper json;
+    @Autowired
+    MockMvc mvc;
+    @Autowired
+    AutomationController automation;
+    @Autowired
+    WorkflowExtensionsController workflows;
+    @Autowired
+    OperationsController workforce;
+    @Autowired
+    NotificationExtensionsController notifications;
+    @Autowired
+    NotificationDigestService digests;
+    @Autowired
+    ExperienceController experience;
+    @Autowired
+    DocumentController documents;
+    @Autowired
+    DocumentPreviewController previews;
+    @Autowired
+    ReportService reports;
+    String tenant;
+    Principal admin, member, hr, foreignAdmin;
+
+    private String id() {
+        return UUID.randomUUID().toString();
+    }
+
+    @BeforeEach
+    void seed() {
+        tenant = id();
+        String other = id();
+        for (String t : List.of(tenant, other)) {
+            db.update(
+                    "INSERT INTO tenants(id,name,slug,status,timezone,created_at) VALUES(?,?,?,'ACTIVE','UTC',UTC_TIMESTAMP(6))",
+                    t, "Extension test", t);
+            db.update(
+                    "INSERT INTO organization_profiles(tenant_id,legal_name,email) VALUES(?,'Test','test@example.test')",
+                    t);
+        }
+        admin = user(tenant, "ADMIN");
+        member = user(tenant, "MEMBER");
+        hr = user(tenant, "HR");
+        foreignAdmin = user(other, "ADMIN");
+    }
+
+    private Principal user(String t, String role) {
+        String id = id();
+        db.update(
+                "INSERT INTO users(id,name,email,password_hash,status,created_at) VALUES(?,?,?,?,'ACTIVE',UTC_TIMESTAMP(6))",
+                id, role, id + "@example.test", "unused");
+        db.update("INSERT INTO memberships(id,tenant_id,user_id,role,status) VALUES(?,?,?,?,'ACTIVE')", id(), t, id,
+                role);
+        return new Principal(id, t, role, id + "@example.test", role);
+    }
+
+    private String definition() {
+        return automation
+                .createDefinition(admin,
+                        Map.of("name", "Typed approval " + id(), "steps",
+                                List.of(Map.of("name", "Review", "approverRole", "HR", "mode", "ANY", "dueHours", 24))))
+                .get("id").toString();
+    }
+
+    private List<Map<String, Object>> schema() {
+        return List.of(
+                Map.of("key", "budget", "label", "Budget", "type", "NUMBER", "required", true, "min", 10, "max", 1000),
+                Map.of("key", "category", "label", "Category", "type", "SELECT", "required", true, "options",
+                        List.of("Equipment", "Travel")));
+    }
+
+    @Test
+    void dryRunHasNoWritesAndPublishedTypedSchemaIsIndependentFromDraft() {
+        String def = definition();
+        workflows.form(admin, def, Map.of("fields", schema()));
+        long before = db.queryForObject("SELECT COUNT(*) FROM workflow_instances WHERE tenant_id=?", Long.class,
+                tenant);
+        assertEquals(false,
+                workflows
+                        .dryRun(member, def,
+                                Map.of("amount", 50, "formData", Map.of("budget", 1, "category", "Travel")))
+                        .get("valid"));
+        assertEquals(true,
+                workflows
+                        .dryRun(member, def,
+                                Map.of("amount", 50, "formData", Map.of("budget", 50, "category", "Travel")))
+                        .get("valid"));
+        assertEquals(before,
+                db.queryForObject("SELECT COUNT(*) FROM workflow_instances WHERE tenant_id=?", Long.class, tenant));
+        automation.publish(admin, def);
+        workflows.form(admin, def, Map.of("fields",
+                List.of(Map.of("key", "newDraftField", "label", "Draft field", "type", "TEXT", "required", true))));
+        assertEquals(schema().size(), ((List<?>) workflows.form(member, def).get("publishedFields")).size());
+        assertEquals(400, assertThrows(ApiException.class, () -> automation.start(member,
+                Map.of("definitionId", def, "title", "Bad", "formData", Map.of("budget", 50, "category", "Invalid"))))
+                .status());
+        var started = automation.start(member, Map.of("definitionId", def, "title", "Valid published data", "formData",
+                Map.of("budget", 50, "category", "Travel")));
+        assertEquals(def, started.get("definitionId"));
+        assertEquals(2, ((List<?>) started.get("formFields")).size());
+        assertEquals(400, assertThrows(ApiException.class,
+                () -> workflows.form(admin, def,
+                        Map.of("fields", List.of(Map.of("key", "tenantId", "label", "Forbidden", "type", "TEXT")))))
+                .status());
+    }
+
+    @Test
+    void requestChangesResubmitsAsNewAuditableInstanceOnOriginalVersion() {
+        String def = definition();
+        workflows.form(admin, def, Map.of("fields", schema()));
+        automation.publish(admin, def);
+        String original = automation.start(member,
+                Map.of("definitionId", def, "title", "Request", "formData", Map.of("budget", 50, "category", "Travel")))
+                .get("id").toString();
+        workflows.changes(hr, original, Map.of("reason", "Use the correct budget"));
+        assertEquals(409,
+                assertThrows(ApiException.class, () -> automation.decide(hr, original, Map.of("decision", "APPROVED")))
+                        .status());
+        assertEquals(403, assertThrows(ApiException.class, () -> workflows.resubmit(admin, original,
+                Map.of("formData", Map.of("budget", 60, "category", "Travel")))).status());
+        var revised = workflows.resubmit(member, original,
+                Map.of("formData", Map.of("budget", 60, "category", "Travel")));
+        assertNotEquals(original, revised.get("id"));
+        assertEquals(original, revised.get("resubmissionOf"));
+        assertEquals("SUPERSEDED",
+                db.queryForObject("SELECT state FROM workflow_instances WHERE id=?", String.class, original));
+        assertEquals(1, ((Number) revised.get("definitionVersion")).intValue());
+        assertEquals("APPROVED",
+                automation.decide(hr, revised.get("id").toString(), Map.of("decision", "APPROVED")).get("state"));
+    }
+
+    @Test
+    void mentionsLoseVisibilityWhenProjectAccessIsRevokedAndCannotLeakIntoDigest() {
+        var project = workforce.create(admin, "projects", Map.of("name", "Private project", "ownerId", admin.userId(),
+                "memberIds", List.of(member.userId(), hr.userId())));
+        String text = "@{" + hr.userId() + "} confidential task comment";
+        notifications.mention(admin,
+                Map.of("body", text, "recipientIds", List.of(hr.userId()), "projectId", project.get("id")));
+        assertTrue(automation.notifications(hr).stream().anyMatch(n -> text.equals(n.get("body"))));
+        assertEquals(404,
+                assertThrows(ApiException.class,
+                        () -> notifications.mention(member,
+                                Map.of("body", "@{" + foreignAdmin.userId() + "}", "projectId", project.get("id"))))
+                        .status());
+        workforce.update(admin, "projects", project.get("id").toString(),
+                Map.of("version", project.get("version"), "memberIds", List.of(member.userId())));
+        assertTrue(automation.notifications(hr).stream().noneMatch(n -> text.equals(n.get("body"))));
+        assertTrue(notifications.mentions(hr).isEmpty());
+        assertEquals(0, ((Number) digests.send(hr).get("notificationCount")).intValue());
+        assertEquals(0,
+                db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?", Integer.class, hr.email()));
+    }
+
+    @Test
+    void ownDigestsQueueRealMailOncePerUnreadNotification() {
+        automation.announce(admin,
+                Map.of("title", "A real notice", "body", "For this member only", "recipientId", member.userId()));
+        digests.configure(member, Map.of("enabled", true, "cadenceHours", 1));
+        assertEquals("QUEUED", digests.send(member).get("status"));
+        assertEquals("EMPTY", digests.send(member).get("status"));
+        assertEquals(1,
+                db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?", Integer.class, member.email()));
+        assertTrue(notifications.history(foreignAdmin).isEmpty());
+        automation.announce(admin,
+                Map.of("title", "Another notice", "body", "Only one new digest item", "recipientId", member.userId()));
+        assertEquals(1, ((Number) digests.send(member).get("notificationCount")).intValue());
+        assertEquals(2,
+                db.queryForObject("SELECT COUNT(*) FROM mail_queue WHERE recipient=?", Integer.class, member.email()));
+    }
+
+    @Test
+    void widgetLayoutsArePersonalAndModuleFlagsDenyServerOperations() throws Exception {
+        workforce.create(admin, "employees", Map.of("name", "Employee", "employeeCode", "W1"));
+        experience.widgets(admin, Map.of("widgets", List
+                .of(Map.of("id", "people", "title", "People", "source", "employees", "type", "METRIC", "order", 0))));
+        assertEquals(1,
+                ((Number) ((Map<?, ?>) experience.widgetData(admin).getFirst().get("data")).get("count")).intValue());
+        assertTrue(((List<?>) experience.widgets(foreignAdmin).get("widgets")).isEmpty());
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> experience.widgets(member, Map.of("widgets", List.of(Map.of("id",
+                        "private", "title", "Private HR", "source", "employees", "type", "LIST", "order", 0)))))
+                        .status());
+        experience.flag(admin, "PROJECTS", Map.of("enabled", false));
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> workforce.create(admin, "projects", Map.of("name", "Disabled")))
+                        .status());
+        String raw = Tokens.issue();
+        db.update(
+                "INSERT INTO sessions(id,token_hash,user_id,tenant_id,created_at,expires_at) VALUES (?,?,?,?,UTC_TIMESTAMP(6),TIMESTAMPADD(HOUR,1,UTC_TIMESTAMP(6)))",
+                id(), Tokens.hash(raw), admin.userId(), tenant);
+        mvc.perform(get("/api/v1/org/records/projects").cookie(new jakarta.servlet.http.Cookie("EOS_SESSION", raw)))
+                .andExpect(status().isForbidden());
+        experience.flag(admin, "PROJECTS", Map.of("enabled", true));
+        assertNotNull(workforce.create(admin, "projects", Map.of("name", "Enabled")).get("id"));
+    }
+
+    @Test
+    void previewUsesCurrentDocumentAuthorizationQuarantineAndSandbox() {
+        String text = "<script>must remain plain text</script>";
+        var file = documents.upload(member, Map.of("name", "safe.txt", "dataUrl",
+                "data:text/plain;base64," + Base64.getEncoder().encodeToString(text.getBytes(StandardCharsets.UTF_8))));
+        String id = file.get("id").toString();
+        assertEquals(409, assertThrows(ApiException.class, () -> previews.preview(member, id, null)).status());
+        documents.review(admin, id, Map.of("decision", "CLEAN", "evidence", "Independent review of text content"));
+        var preview = previews.preview(member, id, null);
+        assertEquals("text/plain", preview.getHeaders().getContentType().getType() + "/"
+                + preview.getHeaders().getContentType().getSubtype());
+        assertTrue(preview.getHeaders().getFirst("Content-Security-Policy").contains("sandbox"));
+        assertArrayEquals(text.getBytes(StandardCharsets.UTF_8), preview.getBody());
+        assertEquals(404, assertThrows(ApiException.class, () -> previews.preview(foreignAdmin, id, null)).status());
+    }
+
+    @Test
+    void conversionAnalyticsUseActualStatusesAndCurrentSalesOwnership() {
+        Principal sales = user(tenant, "SALES");
+        entity("leads", "CONVERTED", sales, Map.of("name", "Converted", "ownerId", sales.userId()));
+        entity("leads", "NEW", sales, Map.of("name", "Open", "ownerId", sales.userId()));
+        entity("leads", "CONVERTED", admin, Map.of("name", "Another owner's lead", "ownerId", admin.userId()));
+        String stage = entity("pipelineStages", "ACTIVE", admin, Map.of("name", "Won", "outcome", "WON"));
+        entity("opportunities", "ACTIVE", sales, Map.of("name", "Won INR", "ownerId", sales.userId(), "stageId", stage,
+                "amount", 120, "currency", "INR"));
+        var conversion = experience.conversions(sales, null, null);
+        assertEquals(2, ((Number) conversion.get("leadCount")).intValue());
+        assertEquals(1, ((Number) conversion.get("convertedLeadCount")).intValue());
+        assertEquals(50.0, ((Number) conversion.get("leadConversionPercent")).doubleValue());
+        assertEquals("120", ((Map<?, ?>) conversion.get("wonAmountsByCurrency")).get("INR").toString());
+        assertEquals(0, ((Number) experience.conversions(foreignAdmin, null, null).get("leadCount")).intValue());
+    }
+
+    @Test
+    void internalReportsRecheckCustomSourcePermissionAfterAssignment() {
+        workforce.create(admin, "employees", Map.of("name", "Protected HR", "employeeCode", "C1"));
+        var export = reports.generate(hr, "HR snapshot", "employees", Map.of(), null);
+        String role = id();
+        db.update("INSERT INTO custom_roles(id,tenant_id,name,base_role,permissions) VALUES (?,?,?,'HR',?)", role,
+                tenant, "Reports without HR source",
+                encode(List.of("GET /api/v1/org/reports/**", "POST /api/v1/org/reports/**")));
+        db.update("UPDATE memberships SET custom_role_id=? WHERE tenant_id=? AND user_id=?", role, tenant, hr.userId());
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> reports.generate(hr, "Denied", "employees", Map.of(), null))
+                        .status());
+        assertEquals(403,
+                assertThrows(ApiException.class, () -> reports.content(hr, export.get("id").toString())).status());
+    }
+
+    private String entity(String kind, String status, Principal owner, Map<String, Object> payload) {
+        String id = id();
+        db.update(
+                "INSERT INTO business_entities(id,tenant_id,kind,payload,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?)",
+                id, tenant, kind, encode(payload), status, owner.userId(), owner.userId());
+        return id;
+    }
+
+    private String encode(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (Exception ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
 }

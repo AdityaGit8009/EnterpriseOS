@@ -1,62 +1,108 @@
-CREATE TABLE business_records (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, kind VARCHAR(40) NOT NULL,
- payload JSON NOT NULL, version BIGINT NOT NULL DEFAULT 1,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- INDEX ix_records_tenant_kind (tenant_id, kind),
- FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-);
-CREATE TABLE attendance (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
- in_at VARCHAR(40) NOT NULL, out_at VARCHAR(40), work_date DATE NOT NULL,
- version BIGINT NOT NULL DEFAULT 1,
- INDEX ix_attendance_tenant_user (tenant_id,user_id,work_date),
- FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (user_id) REFERENCES users(id)
-);
-CREATE TABLE attendance_events (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, attendance_id CHAR(36) NOT NULL,
- actor_id CHAR(36) NOT NULL, event_type VARCHAR(30) NOT NULL, event_value JSON NOT NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- INDEX ix_attendance_events (tenant_id,attendance_id), FOREIGN KEY (attendance_id) REFERENCES attendance(id)
-);
-CREATE TABLE attendance_corrections (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, attendance_id CHAR(36) NOT NULL,
- user_id CHAR(36) NOT NULL, reason VARCHAR(1000) NOT NULL, in_at VARCHAR(40) NOT NULL,
- out_at VARCHAR(40), base_version BIGINT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
- reviewer_id CHAR(36), created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- INDEX ix_corrections_tenant (tenant_id,user_id,status), FOREIGN KEY (attendance_id) REFERENCES attendance(id)
-);
-CREATE TABLE leave_requests (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
- leave_type VARCHAR(100) NOT NULL, start_date DATE NOT NULL, end_date DATE NOT NULL,
- days DECIMAL(10,2) NOT NULL, reason VARCHAR(1000) NOT NULL,
- status VARCHAR(20) NOT NULL DEFAULT 'PENDING', reviewer_id CHAR(36),
- required_levels INT NOT NULL DEFAULT 1, approved_levels INT NOT NULL DEFAULT 0,
- policy_snapshot JSON NOT NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- INDEX ix_leave_tenant_user (tenant_id,user_id,start_date,end_date),
- FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (user_id) REFERENCES users(id)
-);
-CREATE TABLE leave_ledger (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
- leave_type VARCHAR(100) NOT NULL, request_id CHAR(36) NOT NULL,
- delta DECIMAL(10,2) NOT NULL, reason VARCHAR(30) NOT NULL, actor_id CHAR(36) NOT NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- UNIQUE KEY uq_leave_posting (tenant_id,request_id,reason),
- INDEX ix_ledger_balance (tenant_id,user_id,leave_type), FOREIGN KEY (request_id) REFERENCES leave_requests(id)
-);
-CREATE TABLE leave_decisions (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, request_id CHAR(36) NOT NULL,
- actor_id CHAR(36) NOT NULL, decision VARCHAR(20) NOT NULL, step_number INT NOT NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- UNIQUE KEY uq_leave_decision_step (tenant_id,request_id,step_number),
- FOREIGN KEY (request_id) REFERENCES leave_requests(id)
-);
-CREATE TABLE leave_adjustments (
- id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
- leave_type VARCHAR(100) NOT NULL, entitlement_year INT NOT NULL, delta DECIMAL(10,2) NOT NULL,
- reason VARCHAR(1000) NOT NULL, actor_id CHAR(36) NOT NULL,
- created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
- INDEX ix_leave_adjustment (tenant_id,user_id,leave_type,entitlement_year),
- FOREIGN KEY (tenant_id) REFERENCES tenants(id), FOREIGN KEY (user_id) REFERENCES users(id)
-);
+CREATE TABLE business_records (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, kind VARCHAR(40) NOT NULL,
+                                                                                                      payload JSON NOT NULL,
+                                                                                                                   VERSION BIGINT NOT NULL DEFAULT 1,
+                                                                                                                                                   created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                            updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                                     INDEX ix_records_tenant_kind (tenant_id,
+
+                                                                                                                                                                                                                                                kind),
+                               FOREIGN KEY (tenant_id) REFERENCES tenants(id));
+CREATE TABLE attendance (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
+                                                                                                in_at VARCHAR(40) NOT NULL,
+                                                                                                                  out_at VARCHAR(40),
+                                                                                                                         work_date DATE NOT NULL,
+                                                                                                                                        VERSION BIGINT NOT NULL DEFAULT 1,
+                                                                                                                                                                        INDEX ix_attendance_tenant_user (tenant_id,
+
+                                                                                                                                                                                   user_id,
+                                                                                                                                                                                   work_date),
+                         FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+                         FOREIGN KEY (user_id) REFERENCES users(id));
+CREATE TABLE attendance_events (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, attendance_id CHAR(36) NOT NULL,
+                                                                                                             actor_id CHAR(36) NOT NULL,
+                                                                                                                               event_type VARCHAR(30) NOT NULL,
+                                                                                                                                                      event_value JSON NOT NULL,
+                                                                                                                                                                       created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                INDEX ix_attendance_events (tenant_id,
+
+                                                                                                                                                                                                                           attendance_id),
+                                FOREIGN KEY (attendance_id) REFERENCES attendance(id));
+CREATE TABLE attendance_corrections (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, attendance_id CHAR(36) NOT NULL,
+                                                                                                                  user_id CHAR(36) NOT NULL,
+                                                                                                                                   reason VARCHAR(1000) NOT NULL,
+                                                                                                                                                        in_at VARCHAR(40) NOT NULL,
+                                                                                                                                                                          out_at VARCHAR(40),
+                                                                                                                                                                                 base_version BIGINT NOT NULL,
+                                                                                                                                                                                                     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                                                                                                                                                                                                                                         reviewer_id CHAR(36),
+                                                                                                                                                                                                                                                     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                                                                                              INDEX ix_corrections_tenant (tenant_id,
+
+                                                                                                                                                                                                                                                                                                         user_id,
+                                                                                                                                                                                                                                                                                                         status),
+                                     FOREIGN KEY (attendance_id) REFERENCES attendance(id));
+CREATE TABLE leave_requests (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
+                                                                                                    leave_type VARCHAR(100) NOT NULL,
+                                                                                                                            start_date DATE NOT NULL,
+                                                                                                                                            end_date DATE NOT NULL,
+                                                                                                                                                          days DECIMAL(10,
+
+                                                                                                                                                                   2) NOT NULL,
+                                                                                                                                                                      reason VARCHAR(1000) NOT NULL,
+                                                                                                                                                                                           status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                                                                                                                                                                                                                               reviewer_id CHAR(36),
+                                                                                                                                                                                                                                           required_levels INT NOT NULL DEFAULT 1,
+                                                                                                                                                                                                                                                                                approved_levels INT NOT NULL DEFAULT 0,
+                                                                                                                                                                                                                                                                                                                     policy_snapshot JSON NOT NULL,
+                                                                                                                                                                                                                                                                                                                                          created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                                                                                                                                                                                   INDEX ix_leave_tenant_user (tenant_id,
+
+                                                                                                                                                                                                                                                                                                                                                                                              user_id,
+                                                                                                                                                                                                                                                                                                                                                                                              start_date,
+                                                                                                                                                                                                                                                                                                                                                                                              end_date),
+                             FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+                             FOREIGN KEY (user_id) REFERENCES users(id));
+CREATE TABLE leave_ledger (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
+                                                                                                  leave_type VARCHAR(100) NOT NULL,
+                                                                                                                          request_id CHAR(36) NOT NULL,
+                                                                                                                                              delta DECIMAL(10,
+
+                                                                                                                                                        2) NOT NULL,
+                                                                                                                                                           reason VARCHAR(30) NOT NULL,
+                                                                                                                                                                              actor_id CHAR(36) NOT NULL,
+                                                                                                                                                                                                created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                                         UNIQUE KEY uq_leave_posting (tenant_id,
+
+                                                                                                                                                                                                                                                         request_id,
+                                                                                                                                                                                                                                                         reason),
+                                                                                                                                                                                                                                                    INDEX ix_ledger_balance (tenant_id,
+
+                                                                                                                                                                                                                                                               user_id,
+                                                                                                                                                                                                                                                               leave_type),
+                           FOREIGN KEY (request_id) REFERENCES leave_requests(id));
+CREATE TABLE leave_decisions (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, request_id CHAR(36) NOT NULL,
+                                                                                                        actor_id CHAR(36) NOT NULL,
+                                                                                                                          decision VARCHAR(20) NOT NULL,
+                                                                                                                                               step_number INT NOT NULL,
+                                                                                                                                                               created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                        UNIQUE KEY uq_leave_decision_step (tenant_id,
+
+                                                                                                                                                                                                                        request_id,
+                                                                                                                                                                                                                        step_number),
+                              FOREIGN KEY (request_id) REFERENCES leave_requests(id));
+CREATE TABLE leave_adjustments (id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, user_id CHAR(36) NOT NULL,
+                                                                                                       leave_type VARCHAR(100) NOT NULL,
+                                                                                                                               entitlement_year INT NOT NULL,
+                                                                                                                                                    delta DECIMAL(10,
+
+                                                                                                                                                              2) NOT NULL,
+                                                                                                                                                                 reason VARCHAR(1000) NOT NULL,
+                                                                                                                                                                                      actor_id CHAR(36) NOT NULL,
+                                                                                                                                                                                                        created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                                                                                                                                                                                                                                                 INDEX ix_leave_adjustment (tenant_id,
+
+                                                                                                                                                                                                                                                            user_id,
+                                                                                                                                                                                                                                                            leave_type,
+                                                                                                                                                                                                                                                            entitlement_year),
+                                FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+                                FOREIGN KEY (user_id) REFERENCES users(id));
