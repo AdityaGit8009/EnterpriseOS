@@ -4,3 +4,12 @@ tmp/
 .env
 var/
 *.log
+/*.pdf
+/*.doc
+/*.docx
+/*.jpg
+/*.jpeg
+/*.png
+/*.gif
+/*.webp
+/*.bmp

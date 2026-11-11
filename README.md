@@ -1,49 +1,87 @@
-﻿# SolDrashta · EnterpriseOS
+# EnterpriseOS
 
-This is a real React, Spring Boot and MySQL application covering all five phase module groups. The frontend requires authenticated API access. There is no sample-data mode or client-side role impersonation.
+EnterpriseOS is a multi-tenant business operations application with a React and TypeScript web client, a Java 25 / Spring Boot API, and MySQL persistence. The repository includes application source, database migrations, deployment examples, and verification evidence.
 
-## Start the application
+> **Project status:** This is an actively developed project, not a claim of production readiness. The current feature inventory records 226 capabilities as implemented, 87 as partial, and 3 as requiring external configuration. Production deployment, customer acceptance, and regulatory certification have not been completed.
 
-Double-click **Start-EnterpriseOS.cmd**, or run `./Start-EnterpriseOS.ps1` from `D:\EP\EOS`. Open **http://localhost:5173**.
+## What it covers
 
-First-run setup is prefilled with **SolDrashta**, owner email **adityapratap7391@gmail.com**, and **Asia/Kolkata**. Enter a private ERP password and a separate platform administrator email/password. These are new ERP passwords, not your Gmail password. No business records, employees, balances or stock are invented.
+The application organizes functionality into five business areas:
 
-The launcher uses installed Node 22+, Java 25+ and MySQL 8.4 binaries. It creates a separate database at `var/runtime/mysql` on port **3309**, API on **8080**, and frontend on **5173**. Existing Wamp databases are not used. Set `MYSQL_BIN` if MySQL is installed elsewhere.
+1. **Organization and access** — tenant setup, membership, roles, invitations, audit history, MFA, and account security.
+2. **People and work** — employee lifecycle, attendance, leave, projects, tasks, approvals, and time tracking.
+3. **Business operations** — CRM, purchasing, inventory, invoicing, expenses, and payroll workflows.
+4. **Automation and records** — configurable workflows, documents, reports, integrations, and webhooks.
+5. **Administration and recovery** — subscriptions, operational controls, encrypted backups, and restore verification.
 
-Run `./Stop-EnterpriseOS.ps1` to stop while preserving data. Logs and private runtime settings are under `var/runtime`, excluded from source control.
+Feature-level status is tracked in the [implementation matrix](docs/FEATURE_IMPLEMENTATION_MATRIX.csv), [Phase 3 coverage](docs/phase3-coverage.csv), and [Phase 4–5 coverage](docs/phase4-5-coverage.csv).
 
-Opening `erp-home (1).html` directly now shows server-start guidance. Real authentication requires the HTTP-served application. The original theme reference remains in `references/erp-home.original.html`.
+## Technology
 
-## Module groups
-
-| Phase | Implemented module groups |
+| Component | Technology |
 | --- | --- |
-| 1 | Company setup/platform tenants, email-verified registration, DNS domain ownership, India settings/logo, password history/session rotation, TOTP MFA/recovery codes, invitations/import, predefined/custom action roles and audit |
-| 2 | Employees/lifecycle/checklists/auto IDs, private HR fields, shifts/attendance/corrections, leave/ledger/approvals, resignation/comp-off/encashment eligibility, projects/tasks/sprints/Kanban, recurring tasks/risks, time review and change history |
-| 3 | CRM/forecasts/quotes/orders, RFQs/purchases/receipts/returns, stock/FIFO/lots/serials/reservations/counts, invoices/GST/payment records/credits, budgets/expenses, payroll/payslips and fiscal locks |
-| 4 | Versioned workflows/typed forms/dry runs, mentions/digests/SSE, controlled documents/previews/optional object storage, saved/scheduled CSV reports/widgets, scoped API credentials and signed webhooks/retries |
-| 5 | Plans/subscriptions/quotas, operational/release records, module feature flags, security/metrics, CI definition, encrypted backup and isolated restore verification |
+| Web client | React, TypeScript, Vite |
+| API | Java 25, Spring Boot 3.5 |
+| Database | MySQL 8.4 |
+| Schema management | Flyway |
+| API contract | [OpenAPI](docs/api/openapi.json) |
 
-The right-middle appearance button provides **10 color combinations**, light/dark mode and saved preferences. Maker/checker workflows require a different authorized reviewer; invite a second appropriate administrator or domain reviewer.
+## Run locally
 
-## Coverage and required configuration
+### Requirements
 
-The source catalog contains **316 proposed capabilities**, including advanced items. Module coverage does not mean every catalog item is complete. See [all-feature matrix](docs/FEATURE_IMPLEMENTATION_MATRIX.csv), [Phase 3 coverage](docs/phase3-coverage.csv), and [Phase 4/5 coverage](docs/phase4-5-coverage.csv) for implemented, partial, configuration-dependent and missing features. Production certification and completed client UAT are not claimed.
+- Node.js 22 or later
+- Java 25 or later
+- MySQL 8.4
+- Maven 3.9 or later for backend builds
 
-Current review: **226 implemented, 87 partial, 3 requiring external configuration**. Verification covers **86 distinct backend tests**, **47 frontend tests**, **36 HTTP checks**, a **1,200-request local workload with zero failures**, and an encrypted **68-table isolated restore**. See [verification evidence](docs/VERIFICATION.json) for scope and limitations.
+On Windows, run `Start-EnterpriseOS.cmd` or `.\Start-EnterpriseOS.ps1` from the project directory. The launcher starts the frontend at [http://localhost:5173](http://localhost:5173), the API on port `8080`, and an isolated local MySQL data directory on port `3309`. Set `MYSQL_BIN` if the MySQL 8.4 binaries are not discoverable.
 
-- Without SMTP, invitations/reset emails go to the private local `.eml` outbox. They are not delivered to Gmail until a real sender is configured.
-- India tax/payroll values require actual company registrations, applicable rules and approved examples. No tax filing, statutory certification or bank transfer execution is provided.
-- Documents require ClamAV or independent manual review before download; files are not falsely marked malware-free.
-- External integration destinations, hosting/TLS, centralized alerting and production backup schedules need real environment configuration.
-- Browser visual/E2E verification was blocked by browser-access permissions; automated checks are documented separately.
+For the first run, create the organization owner and platform administrator through the setup screen using new, private passwords. No default business accounts or sample business records are created.
 
-## Build and verify
+To stop the local services while keeping their data, run `.\Stop-EnterpriseOS.ps1`.
 
-Frontend, from `apps/web`: `npm install`, `npm run typecheck`, `npm test`, `npm run build`.
+### Docker
 
-Backend, from `services/api`: `mvn verify` using Java 25+. Spring Boot is **3.5.16**. Integration tests require Docker/Testcontainers or explicit `TEST_DB_URL`, `TEST_DB_USERNAME`, `TEST_DB_PASSWORD` for an isolated test database. Never test against the company database. The first-install test creates its own isolated schema.
+Copy `.env.example` to `.env`, set unique local credentials and a persistent encryption key, then run:
 
-After rebuilding, stop and restart the launcher. It copies the packaged API to a private runtime artifact. Docker alternative: configure `.env` from `.env.example`, then `docker compose up --build`; Docker verification is separate from native Windows verification.
+```powershell
+docker compose up --build
+```
 
-See [operations and encrypted recovery](docs/OPERATIONS.md), [API setup](services/api/README.md), [OpenAPI](docs/api/openapi.json), and [verification status](IMPLEMENTATION_STATUS.txt). Original requirements/images remain unchanged; older Phase 1/2 review files are historical planning records.
+Keep `.env` and all generated runtime data private. Never commit real passwords, keys, or production configuration.
+
+## Build and test
+
+Frontend, from `apps/web`:
+
+```powershell
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+Backend, from `services/api`, using Java 25:
+
+```powershell
+mvn verify
+```
+
+Backend integration tests use Testcontainers with Docker or an explicitly configured **isolated test database**. Do not point tests at a working company or production database.
+
+The latest checked-in [verification summary](IMPLEMENTATION_STATUS.txt) reports 86 backend tests and 47 frontend tests passing, along with local HTTP and recovery checks. Browser-based visual/E2E testing and Docker deployment were not verified in that report. See the [machine-readable evidence](docs/VERIFICATION.json) for details and scope.
+
+## Configuration and operational notes
+
+- Without SMTP configuration, invitation and password-reset messages are written to a local outbox and are not delivered to recipients.
+- Payroll and tax workflows require organization-specific policies and expert review; the application does not file returns or execute bank transfers.
+- Document scanning requires ClamAV or an independent review process. Unscanned documents remain quarantined.
+- Production use requires environment-specific HTTPS, secret management, backups, monitoring, integration credentials, and deployment validation.
+- The application has not been certified for regulatory compliance or customer production use.
+
+See the [operations guide](docs/OPERATIONS.md) for setup, security, and recovery guidance, and the [API guide](services/api/README.md) for backend configuration.
+
+## Security
+
+Do not disclose vulnerabilities publicly. If private vulnerability reporting is enabled for this repository, use GitHub's private reporting flow; otherwise, contact the maintainers through their GitHub account.
