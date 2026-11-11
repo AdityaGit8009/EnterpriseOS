@@ -4,6 +4,7 @@ import java.util.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.AntPathMatcher;
@@ -20,7 +21,8 @@ public class CustomAccessController {
     private final ObjectProvider<RequestMappingHandlerMapping> mappings;
 
     public CustomAccessController(JdbcTemplate db, ObjectMapper json, AuditService audit,
-            OrganizationController organization, ObjectProvider<RequestMappingHandlerMapping> mappings) {
+            OrganizationController organization,
+            @Qualifier("requestMappingHandlerMapping") ObjectProvider<RequestMappingHandlerMapping> mappings) {
         this.db = db;
         this.json = json;
         this.audit = audit;

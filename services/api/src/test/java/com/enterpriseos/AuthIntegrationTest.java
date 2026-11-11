@@ -16,6 +16,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.junit.jupiter.api.condition.EnabledIf;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -341,6 +342,9 @@ class AuthIntegrationTest {
     void customRolesRestrictRoutesWithoutExceedingBaseAuthority() throws Exception {
         Cookie owner = login(email),
                 staff = login(jdbc.queryForObject("SELECT email FROM users WHERE id=?", String.class, member));
+        mvc.perform(get("/api/v1/org/permission-catalog").cookie(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id").value(hasItem("GET /api/v1/org/profile")));
         String roleJson = json.writeValueAsString(Map.of("name", "Restricted worker", "baseRole", "MEMBER",
                 "permissions", java.util.List.of("GET /api/v1/org/profile", "GET /api/v1/org/records/{kind}",
                         "POST /api/v1/org/records/{kind}")));
