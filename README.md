@@ -2,6 +2,14 @@
 
 EnterpriseOS is a multi-tenant business operations application with a React and TypeScript web client, a Java 25 / Spring Boot API, and MySQL persistence. The repository includes application source, database migrations, deployment examples, and verification evidence.
 
+<p>
+  <a href="https://github.com/AdityaGit8009/EnterpriseOS/actions/workflows/verify.yml"><img src="https://github.com/AdityaGit8009/EnterpriseOS/actions/workflows/verify.yml/badge.svg?branch=main" alt="Verification workflow status"></a>
+  <img src="https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white" alt="Java 25">
+  <img src="https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white" alt="Spring Boot 3.5">
+  <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19">
+  <img src="https://img.shields.io/badge/MySQL-8.4-4479A1?logo=mysql&logoColor=white" alt="MySQL 8.4">
+</p>
+
 > **Project status:** This is an actively developed project, not a claim of production readiness. The current feature inventory records 226 capabilities as implemented, 87 as partial, and 3 as requiring external configuration. Production deployment, customer acceptance, and regulatory certification have not been completed.
 
 ## What it covers
